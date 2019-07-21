@@ -1,7 +1,77 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"
+		profile="dev">
 
+	<!--<bean id="myTestBean" class="com.github.lshtom.beanfactory.bean.MyTestBean"/>-->
 	<bean id="myTestBean" class="com.github.lshtom.beanfactory.bean.MyTestBean"/>
+
+	<!--depends-on属性的意义是：当前对象的实例化要依赖于depends-on属性中所指定的Bean，只有指定的Bean实例化了，该对象才会实例化-->
+	<bean class="com.github.lshtom.beanfactory.bean.MyTestBean2" lazy-init="default" autowire="byType" depends-on="myTestBean">
+		<property name="bean" ref="myTestBean3"/>
+	</bean>
+
+	<bean id="myTestBean3" class="com.github.lshtom.beanfactory.bean.MyTestBean3" autowire-candidate="false"/>
+
+	<!--外部Bean与内部Bean定义-->
+	<bean id="person" class="com.github.lshtom.beanfactory.bean.outer_innter.Person">
+		<property name="name" value="小明"/>
+		<property name="age" value="23"/>
+		<property name="phoneNumber" value="18700761234"/>
+		<property name="address">
+			<bean class="com.github.lshtom.beanfactory.bean.outer_innter.Address">
+				<property name="country" value="中国"/>
+				<property name="province" value="广东"/>
+				<property name="city" value="佛山"/>
+				<property name="detail" value="北滘镇大垌村23号"/>
+			</bean>
+		</property>
+	</bean>
+
+	<!--下面这种写法就不属于外部-内部Bean-->
+	<!--<bean id="person" class="com.github.lshtom.beanfactory.bean.outer_innter.Person">-->
+		<!--<property name="name" value="小明"/>-->
+		<!--<property name="age" value="23"/>-->
+		<!--<property name="phoneNumber" value="18700761234"/>-->
+		<!--<property name="address" ref="address"/>-->
+	<!--</bean>-->
+	<!--<bean id="address" class="com.github.lshtom.beanfactory.bean.outer_innter.Address">-->
+		<!--<property name="country" value="中国"/>-->
+		<!--<property name="province" value="广东"/>-->
+		<!--<property name="city" value="佛山"/>-->
+		<!--<property name="detail" value="北滘镇大垌村23号"/>-->
+	<!--</bean>-->
+
+	<!--lookup-method标签的使用-->
+	<bean id="getBeanTest" class="com.github.lshtom.beanfactory.bean.lookup_method.GetBeanTest">
+		<lookup-method name="userBean" bean="student"/>
+	</bean>
+	<bean id="user" class="com.github.lshtom.beanfactory.bean.lookup_method.User"/>
+	<bean id="teacher" class="com.github.lshtom.beanfactory.bean.lookup_method.Teacher"/>
+	<bean id="student" class="com.github.lshtom.beanfactory.bean.lookup_method.Student"/>
+
+	<!--replaced-method标签的使用-->
+	<bean id="testChangeMethod" class="com.github.lshtom.beanfactory.bean.replaced_method.TestChangeMethod">
+		<replaced-method name="changeMe" replacer="testMethodReplacer">
+			<!--<arg-type match=""/>-->
+		</replaced-method>
+	</bean>
+	<bean id="testMethodReplacer" class="com.github.lshtom.beanfactory.bean.replaced_method.TestMethodReplacer"/>
+
+	<!--constructor-arg标签使用说明-->
+	<bean id="fruit" name="fruit1,fruit2,fruit3" class="com.github.lshtom.beanfactory.bean.constructor_arg.Fruit">
+		<constructor-arg type="java.lang.String">
+			<value>苹果</value>
+		</constructor-arg>
+		<constructor-arg type="java.lang.String">
+			<value>广西</value>
+		</constructor-arg>
+		<constructor-arg  type="java.lang.Double">
+			<value>23.6</value>
+		</constructor-arg>
+	</bean>
+
+	<!--alias标签使用说明-->
+	<alias name="fruit" alias="orange,apple"/>
 </beans>
