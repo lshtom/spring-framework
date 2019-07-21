@@ -16,71 +16,30 @@
 
 package org.springframework.beans.factory.support;
 
-import java.io.IOException;
-import java.io.NotSerializableException;
-import java.io.ObjectInputStream;
-import java.io.ObjectStreamException;
-import java.io.Serializable;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.TypeConverter;
+import org.springframework.beans.factory.*;
+import org.springframework.beans.factory.config.*;
+import org.springframework.core.OrderComparator;
+import org.springframework.core.ResolvableType;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.lang.Nullable;
+import org.springframework.util.*;
+
+import javax.inject.Provider;
+import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
-import javax.inject.Provider;
-
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.BeansException;
-import org.springframework.beans.TypeConverter;
-import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.beans.factory.BeanCurrentlyInCreationException;
-import org.springframework.beans.factory.BeanDefinitionStoreException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.beans.factory.BeanFactoryUtils;
-import org.springframework.beans.factory.BeanNotOfRequiredTypeException;
-import org.springframework.beans.factory.CannotLoadBeanClassException;
-import org.springframework.beans.factory.FactoryBean;
-import org.springframework.beans.factory.InjectionPoint;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
-import org.springframework.beans.factory.ObjectFactory;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.SmartFactoryBean;
-import org.springframework.beans.factory.SmartInitializingSingleton;
-import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanDefinitionHolder;
-import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.beans.factory.config.ConfigurableBeanFactory;
-import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
-import org.springframework.beans.factory.config.DependencyDescriptor;
-import org.springframework.beans.factory.config.NamedBeanHolder;
-import org.springframework.core.OrderComparator;
-import org.springframework.core.ResolvableType;
-import org.springframework.core.annotation.AnnotationUtils;
-import org.springframework.lang.Nullable;
-import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.CompositeIterator;
-import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
 
 /**
  * Spring's default implementation of the {@link ConfigurableListableBeanFactory}
@@ -879,6 +838,11 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 
 		if (beanDefinition instanceof AbstractBeanDefinition) {
 			try {
+				// 此处的校验主要做了以下事情：
+				// 1、是否同时用到了方法重写的功能配置和工厂方法的功能配置，如果有则校验不通过
+				// 2、如果没有同时用上面这两种，则进一步校验所使用的方法重写功能配置中所指定的要被替换的method是否能在该Bean中找到
+				// （对于<lockup-method>和<replaced-method>子标签中会指定要被替换的method，所以需要校验这个method是否存在）
+				// ！！！这个校验放在了注册的时候做而不是在解析标签的时候做，可能考虑的是解析标签的时候就只注意解析时候的校验，其他之后再统一考虑
 				((AbstractBeanDefinition) beanDefinition).validate();
 			}
 			catch (BeanDefinitionValidationException ex) {
@@ -887,11 +851,24 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			}
 		}
 
+		// 往下就是真正Bean定义信息BeanDefinition的注册逻辑
+		// 注意：所谓的注册只是将Bean的定义配置注册到Spring容器中（并不是Bean实例）
 		BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
+		// Bean的注册分两种情况：该Bean的定义信息已经被注册过了；还没有被注册过；
+		// 情况一：Bean的定义信息已经被注册过了
 		if (existingDefinition != null) {
+			// 对于Bean定义信息已经被注册过的情况，先判断是否允许覆盖Bean定义信息，若不允许则报错
+			// isAllowBeanDefinitionOverriding方法中返回的是allowBeanDefinitionOverriding实例变量的值，
+			// 该值对应的就是配置文件里写的spring.main.allow-bean-definition-overriding的值
 			if (!isAllowBeanDefinitionOverriding()) {
 				throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
 			}
+			// 接下来的几个else if、else主要是针对已存在的Bean定义信息和当前的Bean定义信息的比较，然后输出一些日志信息
+			// 说明：getRole得到的是当前这个Bean所代表的角色，有三种：
+			// ROLE_APPLICATION：值为0，表示该Bean是应用中的重要组成
+			// ROLE_SUPPORT: 值为1， 表示该Bean是较大配置中的组成部分
+			// ROLE_INFRASTRUCTURE：值为2，表示该Bean是基础底层组成部分
+			// 所以，个人理解，Role的值越大表示牵涉到的范围越广，也越重要
 			else if (existingDefinition.getRole() < beanDefinition.getRole()) {
 				// e.g. was ROLE_APPLICATION, now overriding with ROLE_SUPPORT or ROLE_INFRASTRUCTURE
 				if (logger.isInfoEnabled()) {
@@ -914,11 +891,20 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 							"] with [" + beanDefinition + "]");
 				}
 			}
+			// 将Bean定义信息覆盖保存
 			this.beanDefinitionMap.put(beanName, beanDefinition);
 		}
+		// 情况二：Bean的定义信息尚没有被注册过
 		else {
+			// hasBeanCreationStarted方法的作用是：返回这个工厂Bean(?应该包括一般的Bean吧)的创建阶段是否已经开始
 			if (hasBeanCreationStarted()) {
 				// Cannot modify startup-time collection elements anymore (for stable iteration)
+				// 下面这做法，感觉就是如上面这行注释所说，为了稳定迭代，不能再修改启动时的集合元素了
+				// 这时啥意思呢？
+				// 意思是：当前已经有Bean处于创建阶段了，不再是全部都处于Bean注册阶段，
+				// 所以beanDefinitionNames（List类型）中的每一个元素都不能被修改，
+				// 如果是直接调用beanDefinitionNames的add方法的话，如果空间不够势必会发生扩容，在扩容的时候可能会对元素进行复制等改动，
+				// 比如beanDefinitionNames中的2号元素引用的是对象A的，那么在扩容的过程中对象A发生复制，扩容后变成引用对象A'了（？）
 				synchronized (this.beanDefinitionMap) {
 					this.beanDefinitionMap.put(beanName, beanDefinition);
 					List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
@@ -930,6 +916,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			}
 			else {
 				// Still in startup registration phase
+				// 所有的Bean还属于注册阶段，所以直接添加即可
 				this.beanDefinitionMap.put(beanName, beanDefinition);
 				this.beanDefinitionNames.add(beanName);
 				removeManualSingletonName(beanName);
@@ -938,6 +925,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 		}
 
 		if (existingDefinition != null || containsSingleton(beanName)) {
+			// 清除之前留下的beanName的缓存
 			resetBeanDefinition(beanName);
 		}
 	}

@@ -57,13 +57,20 @@ public abstract class BeanDefinitionReaderUtils {
 	public static AbstractBeanDefinition createBeanDefinition(
 			@Nullable String parentName, @Nullable String className, @Nullable ClassLoader classLoader) throws ClassNotFoundException {
 
+		// 创建用于承载各种属性、定义信息的BeanDefinition
 		GenericBeanDefinition bd = new GenericBeanDefinition();
 		bd.setParentName(parentName);
+		// 对Bean类进行加载，得到相应的Class对象，并保存
+		// 可以回想以下：在Java中利用反射进行对象的创建时，大体是经过两步：
+		// 1、加载.class文件，得到相应的Class对象
+		// 2、根据Class对象进行Bean对象的创建
+		// 所以下面执行的就是第一步：类加载，得到Class对象，并保存起来，后面进行Bean的实例化的时候用到
 		if (className != null) {
 			if (classLoader != null) {
 				bd.setBeanClass(ClassUtils.forName(className, classLoader));
 			}
 			else {
+				// 如果类加载器为空，那就先只存类名，后面再进行类加载
 				bd.setBeanClassName(className);
 			}
 		}
@@ -162,10 +169,15 @@ public abstract class BeanDefinitionReaderUtils {
 			throws BeanDefinitionStoreException {
 
 		// Register bean definition under primary name.
+		// 步骤1：先根据beanName-definitionHolder，以beanName来做唯一标识进行注册Bean
 		String beanName = definitionHolder.getBeanName();
+		// DefaultListableBeanFactory类实现了BeanDefinitionRegistry接口，
+		// 故通过该registry对象进行Bean的注册实际上就是将Bean注册到了DefaultListableBeanFactory中的Bean定义信息注册表beanDefinitionMap对象中
 		registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
 
 		// Register aliases for bean name, if any.
+		// 步骤2：根据beanName-aliases，以beanName来做唯一标识来注册Bean的别名，
+		// 其实就是将别名注册到SimpleAliasRegistry类的别名注册表aliasMap中
 		String[] aliases = definitionHolder.getAliases();
 		if (aliases != null) {
 			for (String alias : aliases) {

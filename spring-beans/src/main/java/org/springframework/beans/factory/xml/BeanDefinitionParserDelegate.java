@@ -16,56 +16,23 @@
 
 package org.springframework.beans.factory.xml;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.BeanMetadataAttribute;
+import org.springframework.beans.BeanMetadataAttributeAccessor;
+import org.springframework.beans.PropertyValue;
+import org.springframework.beans.factory.config.*;
+import org.springframework.beans.factory.parsing.*;
+import org.springframework.beans.factory.support.*;
+import org.springframework.lang.Nullable;
+import org.springframework.util.*;
+import org.springframework.util.xml.DomUtils;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import org.springframework.beans.BeanMetadataAttribute;
-import org.springframework.beans.BeanMetadataAttributeAccessor;
-import org.springframework.beans.PropertyValue;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanDefinitionHolder;
-import org.springframework.beans.factory.config.ConstructorArgumentValues;
-import org.springframework.beans.factory.config.RuntimeBeanNameReference;
-import org.springframework.beans.factory.config.RuntimeBeanReference;
-import org.springframework.beans.factory.config.TypedStringValue;
-import org.springframework.beans.factory.parsing.BeanEntry;
-import org.springframework.beans.factory.parsing.ConstructorArgumentEntry;
-import org.springframework.beans.factory.parsing.ParseState;
-import org.springframework.beans.factory.parsing.PropertyEntry;
-import org.springframework.beans.factory.parsing.QualifierEntry;
-import org.springframework.beans.factory.support.AbstractBeanDefinition;
-import org.springframework.beans.factory.support.AutowireCandidateQualifier;
-import org.springframework.beans.factory.support.BeanDefinitionDefaults;
-import org.springframework.beans.factory.support.BeanDefinitionReaderUtils;
-import org.springframework.beans.factory.support.LookupOverride;
-import org.springframework.beans.factory.support.ManagedArray;
-import org.springframework.beans.factory.support.ManagedList;
-import org.springframework.beans.factory.support.ManagedMap;
-import org.springframework.beans.factory.support.ManagedProperties;
-import org.springframework.beans.factory.support.ManagedSet;
-import org.springframework.beans.factory.support.MethodOverrides;
-import org.springframework.beans.factory.support.ReplaceOverride;
-import org.springframework.lang.Nullable;
-import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.CollectionUtils;
-import org.springframework.util.ObjectUtils;
-import org.springframework.util.PatternMatchUtils;
-import org.springframework.util.StringUtils;
-import org.springframework.util.xml.DomUtils;
+import java.util.*;
 
 /**
  * Stateful delegate class used to parse XML bean definitions.
@@ -412,16 +379,20 @@ public class BeanDefinitionParserDelegate {
 	 */
 	@Nullable
 	public BeanDefinitionHolder parseBeanDefinitionElement(Element ele, @Nullable BeanDefinition containingBean) {
+		// 获取id属性和name属性，其中id属性是唯一值，而一个bean却可以有多个name
 		String id = ele.getAttribute(ID_ATTRIBUTE);
 		String nameAttr = ele.getAttribute(NAME_ATTRIBUTE);
 
+		// 分割name属性并作为别名
 		List<String> aliases = new ArrayList<>();
 		if (StringUtils.hasLength(nameAttr)) {
 			String[] nameArr = StringUtils.tokenizeToStringArray(nameAttr, MULTI_VALUE_ATTRIBUTE_DELIMITERS);
 			aliases.addAll(Arrays.asList(nameArr));
 		}
 
+		// 默认是取id的值为beanName
 		String beanName = id;
+		// 若Bean的id为空而别名非空，则取name属性的值（若有多个则取第0个）为beanName，并打出日志信息
 		if (!StringUtils.hasText(beanName) && !aliases.isEmpty()) {
 			beanName = aliases.remove(0);
 			if (logger.isTraceEnabled()) {
@@ -431,22 +402,34 @@ public class BeanDefinitionParserDelegate {
 		}
 
 		if (containingBean == null) {
+			// id属性、name属性的值都要唯一
+			// 此外要注意：如果beanName和aliases均为空的话，这个校验还是能通过的，毕竟已经注册的Bean名称里就没有为空的
 			checkNameUniqueness(beanName, aliases, ele);
 		}
 
+		// 对除了上面的id及name属性外的其他属性的解析
 		AbstractBeanDefinition beanDefinition = parseBeanDefinitionElement(ele, beanName, containingBean);
 		if (beanDefinition != null) {
+			// 考虑到可能beanName为空的情况（即在XML配置文件中定义Bean时没有写id和name），
+			// 此处要生成一个beanName（最常规的做法是以类名为基础）
 			if (!StringUtils.hasText(beanName)) {
 				try {
 					if (containingBean != null) {
+						// generateBeanName方法中的其中一个入参为BeanDefinitionRegistry对象的目的：
+						// BeanDefinitionRegistry对象中持有所有注册的BeanDefinition信息，
+						// 在生成Bean名称的时候要判断所生成的Bean的名称是否是唯一的，
+						// 所以利用BeanDefinitionRegistry对象中持有的所有Bean的名称就可以进行判断
 						beanName = BeanDefinitionReaderUtils.generateBeanName(
 								beanDefinition, this.readerContext.getRegistry(), true);
 					}
 					else {
+						// 在this.readerContext.generateBeanName方法的内部，
+						// 也获取了BeanDefinitionRegistry对象，作用和上面所述一致
 						beanName = this.readerContext.generateBeanName(beanDefinition);
 						// Register an alias for the plain bean class name, if still possible,
 						// if the generator returned the class name plus a suffix.
 						// This is expected for Spring 1.2/2.0 backwards compatibility.
+						// 取beanClassName作为别名
 						String beanClassName = beanDefinition.getBeanClassName();
 						if (beanClassName != null &&
 								beanName.startsWith(beanClassName) && beanName.length() > beanClassName.length() &&
@@ -465,6 +448,7 @@ public class BeanDefinitionParserDelegate {
 				}
 			}
 			String[] aliasesArray = StringUtils.toStringArray(aliases);
+			// 返回BeanDefinitionHolder对象，该对象内部持有beanDefinition、beanName和别名
 			return new BeanDefinitionHolder(beanDefinition, beanName, aliasesArray);
 		}
 
@@ -482,6 +466,7 @@ public class BeanDefinitionParserDelegate {
 			foundName = beanName;
 		}
 		if (foundName == null) {
+			// 除了查BeanName（默认就是Bean的id属性）是否唯一外，还查name属性的值是否唯一
 			foundName = CollectionUtils.findFirstMatch(this.usedNames, aliases);
 		}
 		if (foundName != null) {
@@ -502,27 +487,43 @@ public class BeanDefinitionParserDelegate {
 
 		this.parseState.push(new BeanEntry(beanName));
 
+		// 解析class属性
 		String className = null;
 		if (ele.hasAttribute(CLASS_ATTRIBUTE)) {
 			className = ele.getAttribute(CLASS_ATTRIBUTE).trim();
 		}
+		// 解析parent属性
 		String parent = null;
 		if (ele.hasAttribute(PARENT_ATTRIBUTE)) {
 			parent = ele.getAttribute(PARENT_ATTRIBUTE);
 		}
 
 		try {
+			// 创建用于承载解析出的各种属性值的GenericBeanDefinition对象类型（目前承载了className和parent属性）
 			AbstractBeanDefinition bd = createBeanDefinition(className, parent);
 
+			// 解析默认Bean的各种属性并存到bd对象中（由其承载）
 			parseBeanDefinitionAttributes(ele, beanName, containingBean, bd);
+			// 解析<bean></bean>标签中<description>标签的内容
 			bd.setDescription(DomUtils.getChildElementValueByTagName(ele, DESCRIPTION_ELEMENT));
 
+			// 解析<bean>标签下的子标签<meta>
+			// <meta>标签的作用是可以定义一些K-V值，等到后面需要使用时，可以通过BeanDefinition对象的getAttribute(key)方法获取
 			parseMetaElements(ele, bd);
+			// 解析<bean>标签下的子标签<lookup-method>，
+			// 并且将解析得到的信息封装到LookupOverride对象中，并存入bd对象的methodOverrides属性中
 			parseLookupOverrideSubElements(ele, bd.getMethodOverrides());
+			// 解析<bean>标签下的子标签<replaced-method>，
+			// 并且将解析得到的信息封装到ReplaceOverride对象中，并存入bd对象的methodOverrides属性中
 			parseReplacedMethodSubElements(ele, bd.getMethodOverrides());
 
+			// 解析<bean>标签下的<constructor-arg>子标签，
+			// <constructor-arg>标签用于定义在进行类的实例化时给构造器所传的参数
 			parseConstructorArgElements(ele, bd);
+			// 解析<bean>标签下的<property>子标签，
+			// <property>标签是用于对Bean中的属性进行赋值
 			parsePropertyElements(ele, bd);
+			// 解析<bean>标签下的<qualifier>子标签
 			parseQualifierElements(ele, bd);
 
 			bd.setResource(this.readerContext.getResource());
@@ -556,35 +557,54 @@ public class BeanDefinitionParserDelegate {
 	public AbstractBeanDefinition parseBeanDefinitionAttributes(Element ele, String beanName,
 			@Nullable BeanDefinition containingBean, AbstractBeanDefinition bd) {
 
+		// 步骤1：解析scope属性（若使用了singleton属性则报错）
+		// singleton属性是Spring1.x版本中用到的属性，如果现在还用就会报错
 		if (ele.hasAttribute(SINGLETON_ATTRIBUTE)) {
 			error("Old 1.x 'singleton' attribute in use - upgrade to 'scope' declaration", ele);
 		}
+		// 解析scope属性（如果在bean定义中写了scope属性，则从scope属性中进行解析）
 		else if (ele.hasAttribute(SCOPE_ATTRIBUTE)) {
 			bd.setScope(ele.getAttribute(SCOPE_ATTRIBUTE));
 		}
+		// 若没有写scope属性，但是外部Bean非空，则取外部Bean中的scope属性的值
+		// 注意：不是父子Bean，父子Bean在XML配置文件中是两个平行的Beani定义，子Bean的定义中使用parent属性来指定其父Bean
+		// 而外部Bean与内部Bean则是外部Bean中的某个属性由内部Bean来定义(内部Bean的定义要写在外部Bean的属性中)
 		else if (containingBean != null) {
 			// Take default from containing bean in case of an inner bean definition.
 			bd.setScope(containingBean.getScope());
 		}
 
+		// 步骤2：解析abstract属性
 		if (ele.hasAttribute(ABSTRACT_ATTRIBUTE)) {
 			bd.setAbstract(TRUE_VALUE.equals(ele.getAttribute(ABSTRACT_ATTRIBUTE)));
 		}
 
+		// 步骤3：解析lazy-init属性
 		String lazyInit = ele.getAttribute(LAZY_INIT_ATTRIBUTE);
+		// lazy-init属性的取值由三个：true/false/default
 		if (isDefaultValue(lazyInit)) {
+			// 如果lazy-init属性的值是default，则取DocumentDefaultsDefinition对象实例的lazy-init对于的默认值
+			// defaults对象是DocumentDefaultsDefinition类型的，该对象中包括了相应属性的默认值
+			// 那么默认值是什么时候被初始化的呢？是在创建该委托类之后，在调用initDefaults时进行的默认值初始化
 			lazyInit = this.defaults.getLazyInit();
 		}
 		bd.setLazyInit(TRUE_VALUE.equals(lazyInit));
 
+		// 步骤4：解析autowire属性
+		// autowire属性用于指定注入方式（NO、byType、byName、constructor）
 		String autowire = ele.getAttribute(AUTOWIRE_ATTRIBUTE);
 		bd.setAutowireMode(getAutowireMode(autowire));
 
+		// 步骤5：解析depends-on属性
 		if (ele.hasAttribute(DEPENDS_ON_ATTRIBUTE)) {
 			String dependsOn = ele.getAttribute(DEPENDS_ON_ATTRIBUTE);
 			bd.setDependsOn(StringUtils.tokenizeToStringArray(dependsOn, MULTI_VALUE_ATTRIBUTE_DELIMITERS));
 		}
 
+		// 步骤6：解析autowire-candidate属性
+		// autowire-candidate属性的作用是指定这个Bean是否可作为注入的候选，默认是true
+		// 意思是：假设有一个类MyTestBean2，其有一个属性是MyTestBean3类型的，同时假设定义了多个MyTestBean3类型的Bean，
+		// 那么完全可以将部分MyTestBean3类型的Bean的autowire-candidate属性定义为false，那么就不会被注入到MyTestBean2中
 		String autowireCandidate = ele.getAttribute(AUTOWIRE_CANDIDATE_ATTRIBUTE);
 		if (isDefaultValue(autowireCandidate)) {
 			String candidatePattern = this.defaults.getAutowireCandidates();
@@ -597,10 +617,13 @@ public class BeanDefinitionParserDelegate {
 			bd.setAutowireCandidate(TRUE_VALUE.equals(autowireCandidate));
 		}
 
+		// 步骤7：解析primary属性
+		// primary属性的作用：如果有多个同类型的Bean可以注入到其他Bean的某个属性中，那么Spring将首先注入primary属性为true的
 		if (ele.hasAttribute(PRIMARY_ATTRIBUTE)) {
 			bd.setPrimary(TRUE_VALUE.equals(ele.getAttribute(PRIMARY_ATTRIBUTE)));
 		}
 
+		// 步骤8：解析init-method属性
 		if (ele.hasAttribute(INIT_METHOD_ATTRIBUTE)) {
 			String initMethodName = ele.getAttribute(INIT_METHOD_ATTRIBUTE);
 			bd.setInitMethodName(initMethodName);
@@ -610,6 +633,7 @@ public class BeanDefinitionParserDelegate {
 			bd.setEnforceInitMethod(false);
 		}
 
+		// 步骤9：解析destroy-method属性
 		if (ele.hasAttribute(DESTROY_METHOD_ATTRIBUTE)) {
 			String destroyMethodName = ele.getAttribute(DESTROY_METHOD_ATTRIBUTE);
 			bd.setDestroyMethodName(destroyMethodName);
@@ -619,9 +643,12 @@ public class BeanDefinitionParserDelegate {
 			bd.setEnforceDestroyMethod(false);
 		}
 
+		// 步骤10：解析factory-method属性
 		if (ele.hasAttribute(FACTORY_METHOD_ATTRIBUTE)) {
 			bd.setFactoryMethodName(ele.getAttribute(FACTORY_METHOD_ATTRIBUTE));
 		}
+
+		// 步骤11：解析factory-bean属性
 		if (ele.hasAttribute(FACTORY_BEAN_ATTRIBUTE)) {
 			bd.setFactoryBeanName(ele.getAttribute(FACTORY_BEAN_ATTRIBUTE));
 		}
@@ -689,6 +716,10 @@ public class BeanDefinitionParserDelegate {
 		for (int i = 0; i < nl.getLength(); i++) {
 			Node node = nl.item(i);
 			if (isCandidateElement(node) && nodeNameEquals(node, CONSTRUCTOR_ARG_ELEMENT)) {
+				// 依次遍历<bean>标签中所有的<constructor-arg>标签
+				// <constructor-arg index="0">
+				//     <value>xxx</value>
+				// </constructor-arg>
 				parseConstructorArgElement((Element) node, bd);
 			}
 		}
@@ -702,6 +733,7 @@ public class BeanDefinitionParserDelegate {
 		for (int i = 0; i < nl.getLength(); i++) {
 			Node node = nl.item(i);
 			if (isCandidateElement(node) && nodeNameEquals(node, PROPERTY_ELEMENT)) {
+				// 依次遍历<bean>标签下的<property>子标签并进行处理
 				parsePropertyElement((Element) node, bd);
 			}
 		}
@@ -715,6 +747,7 @@ public class BeanDefinitionParserDelegate {
 		for (int i = 0; i < nl.getLength(); i++) {
 			Node node = nl.item(i);
 			if (isCandidateElement(node) && nodeNameEquals(node, QUALIFIER_ELEMENT)) {
+				// 依次遍历<bean>标签下的多个<qualifier>标签
 				parseQualifierElement((Element) node, bd);
 			}
 		}
@@ -729,6 +762,8 @@ public class BeanDefinitionParserDelegate {
 			Node node = nl.item(i);
 			if (isCandidateElement(node) && nodeNameEquals(node, LOOKUP_METHOD_ELEMENT)) {
 				Element ele = (Element) node;
+				// 获取<lookup-method>标签中的name属性和bean属性的值
+				// name属性的值即为要被注入的方法名，bean属性的值为注入的Bean的名称
 				String methodName = ele.getAttribute(NAME_ATTRIBUTE);
 				String beanRef = ele.getAttribute(BEAN_ELEMENT);
 				LookupOverride override = new LookupOverride(methodName, beanRef);
@@ -751,6 +786,7 @@ public class BeanDefinitionParserDelegate {
 				String callback = replacedMethodEle.getAttribute(REPLACER_ATTRIBUTE);
 				ReplaceOverride replaceOverride = new ReplaceOverride(name, callback);
 				// Look for arg-type match elements.
+				// 进一步解析<replaced-method>子标签下的<arg-type>子标签（如果有的话）
 				List<Element> argTypeEles = DomUtils.getChildElementsByTagName(replacedMethodEle, ARG_TYPE_ELEMENT);
 				for (Element argTypeEle : argTypeEles) {
 					String match = argTypeEle.getAttribute(ARG_TYPE_MATCH_ATTRIBUTE);
@@ -781,8 +817,11 @@ public class BeanDefinitionParserDelegate {
 				else {
 					try {
 						this.parseState.push(new ConstructorArgumentEntry(index));
+						// 对<constructor-arg>标签中的属性进行解析
 						Object value = parsePropertyValue(ele, bd, null);
+						// 将上一步中解析得到的value值包装到ConstructorArgumentValues.ValueHolder类型的对象中
 						ConstructorArgumentValues.ValueHolder valueHolder = new ConstructorArgumentValues.ValueHolder(value);
+						// 如果类型、名称属性非空，则将相应的属性值保存到valueHolder对象中
 						if (StringUtils.hasLength(typeAttr)) {
 							valueHolder.setType(typeAttr);
 						}
@@ -790,10 +829,14 @@ public class BeanDefinitionParserDelegate {
 							valueHolder.setName(nameAttr);
 						}
 						valueHolder.setSource(extractSource(ele));
+						// 将解析当前的<constructor-arg>标签后得到的valueHolder对象值保存到当前的BeanDefinition对象中
+						// 注：一个<bean>下可能会有多个<constructor-arg>子标签，每个子标签的值对应一个构造器的入参
 						if (bd.getConstructorArgumentValues().hasIndexedArgumentValue(index)) {
 							error("Ambiguous constructor-arg entries for index " + index, ele);
 						}
 						else {
+							// 注意：由于有index属性，所以这里调用的方法是addIndexedArgumentValue，
+							// 即在保存值的同时也将顺序保存下来
 							bd.getConstructorArgumentValues().addIndexedArgumentValue(index, valueHolder);
 						}
 					}
@@ -818,6 +861,8 @@ public class BeanDefinitionParserDelegate {
 					valueHolder.setName(nameAttr);
 				}
 				valueHolder.setSource(extractSource(ele));
+				// 注意：由于没有index属性，所以此处调用的方法是addGenericArgumentValue，
+				// 即只保存值，没有顺序，顺序就是解析时的顺序
 				bd.getConstructorArgumentValues().addGenericArgumentValue(valueHolder);
 			}
 			finally {
@@ -909,9 +954,13 @@ public class BeanDefinitionParserDelegate {
 		Element subElement = null;
 		for (int i = 0; i < nl.getLength(); i++) {
 			Node node = nl.item(i);
+			// <description>和<meta>不处理
 			if (node instanceof Element && !nodeNameEquals(node, DESCRIPTION_ELEMENT) &&
 					!nodeNameEquals(node, META_ELEMENT)) {
 				// Child element is what we're looking for.
+				// <constructor-arg>或<property>标签下可有多种类型的子标签，如<value>、<bean>标签等（<description>和<meta>除外，有也不处理），
+				// 但是，只能有且只有一个，所以下面这个if-else的逻辑就做了这样一个判断：
+				// 第一次的时候subElement为null，给其赋值后，若在下一个循环判断其非空，则说明有多于1个的子标签，故报错
 				if (subElement != null) {
 					error(elementName + " must not contain more than one sub-element", ele);
 				}
@@ -923,6 +972,9 @@ public class BeanDefinitionParserDelegate {
 
 		boolean hasRefAttribute = ele.hasAttribute(REF_ATTRIBUTE);
 		boolean hasValueAttribute = ele.hasAttribute(VALUE_ATTRIBUTE);
+		// 此处是一个校验，规则如下：
+		// 1、不能同时有ref和value属性
+		// 2、有了ref或value属性后不能又有子标签
 		if ((hasRefAttribute && hasValueAttribute) ||
 				((hasRefAttribute || hasValueAttribute) && subElement != null)) {
 			error(elementName +
@@ -931,6 +983,7 @@ public class BeanDefinitionParserDelegate {
 
 		if (hasRefAttribute) {
 			String refName = ele.getAttribute(REF_ATTRIBUTE);
+			// 如果ref属性的值为空字符串则不通过
 			if (!StringUtils.hasText(refName)) {
 				error(elementName + " contains empty 'ref' attribute", ele);
 			}
@@ -1376,6 +1429,7 @@ public class BeanDefinitionParserDelegate {
 		BeanDefinitionHolder finalDefinition = definitionHolder;
 
 		// Decorate based on custom attributes first.
+		// 步骤1：先获取并装饰自定义属性
 		NamedNodeMap attributes = ele.getAttributes();
 		for (int i = 0; i < attributes.getLength(); i++) {
 			Node node = attributes.item(i);
@@ -1383,6 +1437,7 @@ public class BeanDefinitionParserDelegate {
 		}
 
 		// Decorate based on custom nested elements.
+		// 步骤2：再获取并装饰自定义子标签
 		NodeList children = ele.getChildNodes();
 		for (int i = 0; i < children.getLength(); i++) {
 			Node node = children.item(i);
@@ -1396,8 +1451,11 @@ public class BeanDefinitionParserDelegate {
 	public BeanDefinitionHolder decorateIfRequired(
 			Node node, BeanDefinitionHolder originalDef, @Nullable BeanDefinition containingBd) {
 
+		// 获取自定义属性/自定义子标签所对应的命名空间
 		String namespaceUri = getNamespaceURI(node);
+		// 只有命名空间非空且不是默认命名空间（即不是默认属性/标签）才会做进一步处理
 		if (namespaceUri != null && !isDefaultNamespace(namespaceUri)) {
+			// 获取自定义类型所对应的NamespaceHandler实例，后面会利用该实例对自定义属性/标签进行解析，并装饰原来的Bean
 			NamespaceHandler handler = this.readerContext.getNamespaceHandlerResolver().resolve(namespaceUri);
 			if (handler != null) {
 				BeanDefinitionHolder decorated =
@@ -1470,6 +1528,10 @@ public class BeanDefinitionParserDelegate {
 	 * @param desiredName the name to check for
 	 */
 	public boolean nodeNameEquals(Node node, String desiredName) {
+		// getLocalName方法内部调用的是node.getLocalName,
+		// 初步一看，会觉得为啥要封装这么一个方法，不是多此语句吗？毕竟||左边就直接就是node.getNodeName()
+		// 后来打开getLocalName方法看到注释上有说明：目的就是可以让子类去覆盖，只是默认的实现是node.getLocalName()
+		// 所以从这点可看出，Spring中的很多类是面向继承来进行设计的，父类提供一个默认实现，而子类则可覆写，从而实现扩展
 		return desiredName.equals(node.getNodeName()) || desiredName.equals(getLocalName(node));
 	}
 

@@ -16,14 +16,10 @@
 
 package org.springframework.util.xml;
 
-import java.io.BufferedReader;
-import java.io.CharConversionException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
+
+import java.io.*;
 
 /**
  * Detects whether an XML stream is using DTD- or XSD-based validation.
@@ -93,12 +89,15 @@ public class XmlValidationModeDetector {
 		try {
 			boolean isDtdValidated = false;
 			String content;
+			// 按行读取XML文件的内容
 			while ((content = reader.readLine()) != null) {
 				content = consumeCommentTokens(content);
 				if (this.inComment || !StringUtils.hasText(content)) {
+					// 如果当前读取的内容处于注释中或者当前行没有内容，则接着读取下一行
 					continue;
 				}
 				if (hasDoctype(content)) {
+					// 检测当前行的内容中时候含有字符串“DOCTYPE”，若有则表示当前XML文件所使用的验证模式为DTD
 					isDtdValidated = true;
 					break;
 				}
@@ -107,6 +106,7 @@ public class XmlValidationModeDetector {
 					break;
 				}
 			}
+			// 整个逻辑其实是检测到了字符串“DOCTYPE”，则被认为使用DTD作为验证模式，否则为XSD
 			return (isDtdValidated ? VALIDATION_DTD : VALIDATION_XSD);
 		}
 		catch (CharConversionException ex) {
@@ -115,6 +115,7 @@ public class XmlValidationModeDetector {
 			return VALIDATION_AUTO;
 		}
 		finally {
+			// 虽然输入流不是在此方法打开的，但是是在此方法中进行使用且使用完了的，所以在此方法中对输入流进行关闭
 			reader.close();
 		}
 	}

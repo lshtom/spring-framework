@@ -16,18 +16,17 @@
 
 package org.springframework.core;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
+import org.springframework.util.StringValueResolver;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
-import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
-import org.springframework.util.StringValueResolver;
 
 /**
  * Simple implementation of the {@link AliasRegistry} interface.
@@ -49,9 +48,18 @@ public class SimpleAliasRegistry implements AliasRegistry {
 
 	@Override
 	public void registerAlias(String name, String alias) {
+		// 别名注册的整体逻辑：（所谓的注册就是以 别名-Bean名为K-V进行注册）
+		// 1、别名是否与BeanName相同，若相同则不注册别名了，并清除该别名
+		// 2、若别名与beanName不同，则可进行注册，接下来是判断是否已经注册过了
+		// 2.1、如果根据别名获取到的注册名与beanName一致，则这就是我们想要的，所以无需注册，over
+		// 2.2、如果不一致，则判断下是否允许覆盖注册名，若允许则覆盖
+		// 3、在最终的别名注册前，还要检查下是否有循环引用
+		// 4、将别名-beanName注册到别名注册表aliasMap中
+
 		Assert.hasText(name, "'name' must not be empty");
 		Assert.hasText(alias, "'alias' must not be empty");
 		synchronized (this.aliasMap) {
+			// 如果beanName和别名相同则不保存别名，并删除相应的别名
 			if (alias.equals(name)) {
 				this.aliasMap.remove(alias);
 				if (logger.isDebugEnabled()) {
@@ -65,6 +73,8 @@ public class SimpleAliasRegistry implements AliasRegistry {
 						// An existing alias - no need to re-register
 						return;
 					}
+					// 默认别名是可以覆盖注册的，如果不希望别名可以被覆盖注册，则可以在子类中复写这个方法
+					// 这一点的处理与bean的注册不同，bean注册中是有个实例变量来保存对应的配置，然后根据配置来决定是否可以覆盖
 					if (!allowAliasOverriding()) {
 						throw new IllegalStateException("Cannot define alias '" + alias + "' for name '" +
 								name + "': It is already registered for name '" + registeredName + "'.");
@@ -74,7 +84,10 @@ public class SimpleAliasRegistry implements AliasRegistry {
 								registeredName + "' with new target name '" + name + "'");
 					}
 				}
+				// 校验给定beanName，是否已经注册有别名了
+				// 校验当A->B存在时(即A为name,B为别名)，若检测到A->C->B(A为name,C为别名,C为name,B为别名)则抛出异常。
 				checkForAliasCircle(name, alias);
+				// 以（别名-beanName）这样的K-V来保存到别名注册表中
 				this.aliasMap.put(alias, name);
 				if (logger.isTraceEnabled()) {
 					logger.trace("Alias definition '" + alias + "' registered for name '" + name + "'");
@@ -100,6 +113,8 @@ public class SimpleAliasRegistry implements AliasRegistry {
 	public boolean hasAlias(String name, String alias) {
 		for (Map.Entry<String, String> entry : this.aliasMap.entrySet()) {
 			String registeredName = entry.getValue();
+			// 判断逻辑：注册名等于当前beanName的是否有相同的别名（当前别名与注册别名相同），
+			// 若有，则表明对于给定的BeanName，已经注册有别名了
 			if (registeredName.equals(name)) {
 				String registeredAlias = entry.getKey();
 				if (registeredAlias.equals(alias) || hasAlias(registeredAlias, alias)) {
