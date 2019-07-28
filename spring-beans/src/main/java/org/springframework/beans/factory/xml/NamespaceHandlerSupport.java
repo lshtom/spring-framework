@@ -16,16 +16,15 @@
 
 package org.springframework.beans.factory.xml;
 
-import java.util.HashMap;
-import java.util.Map;
-
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.BeanDefinitionHolder;
+import org.springframework.lang.Nullable;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanDefinitionHolder;
-import org.springframework.lang.Nullable;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Support class for implementing custom {@link NamespaceHandler NamespaceHandlers}.
@@ -70,7 +69,9 @@ public abstract class NamespaceHandlerSupport implements NamespaceHandler {
 	@Override
 	@Nullable
 	public BeanDefinition parse(Element element, ParserContext parserContext) {
+		// 步骤1：获取该自定义标签（元素）所对应的解析器
 		BeanDefinitionParser parser = findParserForElement(element, parserContext);
+		// 步骤2：利用解析器进行解析
 		return (parser != null ? parser.parse(element, parserContext) : null);
 	}
 
@@ -80,7 +81,12 @@ public abstract class NamespaceHandlerSupport implements NamespaceHandler {
 	 */
 	@Nullable
 	private BeanDefinitionParser findParserForElement(Element element, ParserContext parserContext) {
+		// 获取元素的名称，也就是自定义标签<myname:user中的user
 		String localName = parserContext.getDelegate().getLocalName(element);
+		// 根据名称找到对应的解析器实例：
+		// 例如在自定义的MyNamespaceHandler的init方法中调用了“registerBeanDefinitionParser("user", new UserBeanDefinitionParser());”,
+		// 其实就是将解析器实例注册到了parsers对象中(MyNamespaceHandler的抽象类即NamespaceHandlerSupport中)，
+		// 故此处就是从parsers实例中获取该解析器
 		BeanDefinitionParser parser = this.parsers.get(localName);
 		if (parser == null) {
 			parserContext.getReaderContext().fatal(

@@ -1407,15 +1407,29 @@ public class BeanDefinitionParserDelegate {
 
 	@Nullable
 	public BeanDefinition parseCustomElement(Element ele, @Nullable BeanDefinition containingBd) {
+		// 步骤1：获取元素（此处为自定义标签）所对应的命名空间
 		String namespaceUri = getNamespaceURI(ele);
 		if (namespaceUri == null) {
 			return null;
 		}
+		// 步骤2：根据命名空间找到对应的NamespaceHandler
+		// 先从readerContext对象中获取NamespaceHandlerResolver对象，
+		// 再由NamespaceHandlerResolver对象的resolve方法来根据命名空间获取相应的NamespaceHandler。
+		// 进一步说明：
+		// readerContext对象是在XmlBeanDefinitionReader类的registerBeanDefinitions方法中创建的,
+		// 在创建readerContext对象的时候也完成了NamespaceHandlerResolver对象的创建,
+		// 默认创建的是DefaultNamespaceHandlerResolver,
+		// 在DefaultNamespaceHandlerResolver类中，会使用一个默认的常量来指明spring.handlers文件的路径,
+		// 因此在接着调用的resolve方法的内部，首先就会获得所有的handlerMapping，这个其实就是通过读取spring.handlers来得到的
 		NamespaceHandler handler = this.readerContext.getNamespaceHandlerResolver().resolve(namespaceUri);
 		if (handler == null) {
 			error("Unable to locate Spring NamespaceHandler for XML schema namespace [" + namespaceUri + "]", ele);
 			return null;
 		}
+		// 步骤3：调用自定义的NamespaceHandler进行解析
+		// 注意：parse方法的第二个入参为PaserContext对象，其内部封装了readerContext对象，
+		// 而readerContext对象内部是持有rigstry对象的，
+		// 这就意味着可通过该对象来将Bean注册到容器中
 		return handler.parse(ele, new ParserContext(this.readerContext, this, containingBd));
 	}
 

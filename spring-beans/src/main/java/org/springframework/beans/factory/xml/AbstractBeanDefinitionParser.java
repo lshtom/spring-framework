@@ -60,6 +60,7 @@ public abstract class AbstractBeanDefinitionParser implements BeanDefinitionPars
 	@Override
 	@Nullable
 	public final BeanDefinition parse(Element element, ParserContext parserContext) {
+		// 利用解析器进行标签的解析并得到AbstractBeanDefinition（Bean定义信息）
 		AbstractBeanDefinition definition = parseInternal(element, parserContext);
 		if (definition != null && !parserContext.isNested()) {
 			try {
@@ -76,7 +77,10 @@ public abstract class AbstractBeanDefinitionParser implements BeanDefinitionPars
 						aliases = StringUtils.trimArrayElements(StringUtils.commaDelimitedListToStringArray(name));
 					}
 				}
+				// 将Bean定义信息、id和别名包装成BeanDefinitionHolder对象
 				BeanDefinitionHolder holder = new BeanDefinitionHolder(definition, id, aliases);
+				// 真正将解析的Bean注册到Spring容器中的地方：
+				// 从parserContext对象中获取注册器registry对象，并利用该对象将Bean注册到容器中
 				registerBeanDefinition(holder, parserContext.getRegistry());
 				if (shouldFireEvents()) {
 					BeanComponentDefinition componentDefinition = new BeanComponentDefinition(holder);

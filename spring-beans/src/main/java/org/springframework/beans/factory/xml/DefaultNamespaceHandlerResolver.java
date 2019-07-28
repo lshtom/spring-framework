@@ -16,14 +16,8 @@
 
 package org.springframework.beans.factory.xml;
 
-import java.io.IOException;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.FatalBeanException;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
@@ -31,6 +25,11 @@ import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default implementation of the {@link NamespaceHandlerResolver} interface.
@@ -115,7 +114,11 @@ public class DefaultNamespaceHandlerResolver implements NamespaceHandlerResolver
 	@Override
 	@Nullable
 	public NamespaceHandler resolve(String namespaceUri) {
+		// 获取所有的HandlerMapping，Key为命名空间，Value为相应的Handler对象的全路径名
 		Map<String, Object> handlerMappings = getHandlerMappings();
+		// 根据命名空间获取相应的handler的对象或类名,
+		// 如果之前该命名空间已经被获取过一次handler的话，那么此处得到的其实是handler对象，
+		// 但如果是首次的话，那么此次得到的就是一个handler的全路径类名
 		Object handlerOrClassName = handlerMappings.get(namespaceUri);
 		if (handlerOrClassName == null) {
 			return null;
@@ -126,13 +129,20 @@ public class DefaultNamespaceHandlerResolver implements NamespaceHandlerResolver
 		else {
 			String className = (String) handlerOrClassName;
 			try {
+				// 根据handler的类名来获取相应的Class对象，并判断是否为NamespaceHandler类型
 				Class<?> handlerClass = ClassUtils.forName(className, this.classLoader);
 				if (!NamespaceHandler.class.isAssignableFrom(handlerClass)) {
 					throw new FatalBeanException("Class [" + className + "] for namespace [" + namespaceUri +
 							"] does not implement the [" + NamespaceHandler.class.getName() + "] interface");
 				}
+				// 反射创建NamespaceHandler对象实例
 				NamespaceHandler namespaceHandler = (NamespaceHandler) BeanUtils.instantiateClass(handlerClass);
+				// 关键：之前自定义的NamespaceHandler中实现的init方法就是在此处被调用的,
+				// 在init方法中，进行的工作是将自定义的BeanDefinitionParser创建出来并保存，
+				// 但注意的是：init方法中创建出的BeanDefinitionParser对象实例是保存到了抽象类NamespaceHandlerSupport的parsers实例变量中，
+				// 而并非是直接注册到Spring容器中
 				namespaceHandler.init();
+				// 将已经创建好的NamespaceHandler对象缓存起来,下次再获取就无需创建
 				handlerMappings.put(namespaceUri, namespaceHandler);
 				return namespaceHandler;
 			}
