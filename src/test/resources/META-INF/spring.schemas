@@ -1,1 +1,2 @@
 http\://www.foo.com/schema/component/component.xsd=com/foo/component.xsd
+http\://www.lexueba.com/schema/user.xsd=com/github/lshtom/beanfactory/UserCustomTag.xsd

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"
+	   xmlns:myname="http://www.lexueba.com/schema/user"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+							http://www.lexueba.com/schema/user http://www.lexueba.com/schema/user.xsd"
 		profile="dev">
 
 	<!--<bean id="myTestBean" class="com.github.lshtom.beanfactory.bean.MyTestBean"/>-->
@@ -74,4 +76,7 @@
 
 	<!--alias标签使用说明-->
 	<alias name="fruit" alias="orange,apple"/>
+
+	<!--测试自定义标签-->
+	<myname:user id="testCustomTag" userName="aaa" email="bbb@ccc.com"/>
 </beans>

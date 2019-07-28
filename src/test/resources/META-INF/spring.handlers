@@ -1,1 +1,2 @@
 http\://www.foo.com/schema/component=com.foo.ComponentNamespaceHandler
+http\://www.lexueba.com/schema/user=com.github.lshtom.beanfactory.custom_tag.MyNamespaceHandler

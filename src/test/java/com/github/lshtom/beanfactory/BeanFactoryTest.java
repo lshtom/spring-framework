@@ -6,10 +6,13 @@ import com.github.lshtom.beanfactory.bean.constructor_arg.Fruit;
 import com.github.lshtom.beanfactory.bean.lookup_method.GetBeanTest;
 import com.github.lshtom.beanfactory.bean.outer_innter.Person;
 import com.github.lshtom.beanfactory.bean.replaced_method.TestChangeMethod;
+import com.github.lshtom.beanfactory.custom_tag.User;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.xml.XmlBeanFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
@@ -108,5 +111,15 @@ public class BeanFactoryTest {
 		BeanFactory bf = new XmlBeanFactory(new ClassPathResource("com/github/lshtom/beanfactory/beanFactoryTest.xml"));
 		Fruit fruit = (Fruit)bf.getBean("fruit", Fruit.class);
 		System.out.println(fruit);
+	}
+
+	/**
+	 * 测试自定义标签
+	 */
+	@Test
+	public void testCustomTag() {
+		ApplicationContext bf = new ClassPathXmlApplicationContext("com/github/lshtom/beanfactory/beanFactoryTest.xml");
+		User user = bf.getBean("testCustomTag", User.class);
+		System.out.println(user.getUserName() + "," + user.getEmail());
 	}
 }
