@@ -67,13 +67,14 @@ public class DefaultDocumentLoader implements DocumentLoader {
 	@Override
 	public Document loadDocument(InputSource inputSource, EntityResolver entityResolver,
 			ErrorHandler errorHandler, int validationMode, boolean namespaceAware) throws Exception {
-		// 创建Document对象建造工厂【工厂方法模式】
+		// 步骤1：创建Document对象建造工厂【工厂方法模式】
 		DocumentBuilderFactory factory = createDocumentBuilderFactory(validationMode, namespaceAware);
 		if (logger.isTraceEnabled()) {
 			logger.trace("Using JAXP provider [" + factory.getClass().getName() + "]");
 		}
+		// 步骤2：创建/获取Document对象建造者【建造者模式】
 		DocumentBuilder builder = createDocumentBuilder(factory, entityResolver, errorHandler);
-		// 解析输入流进行Document对象的建造工作
+		// 步骤3：解析输入流进行Document对象的建造工作
 		return builder.parse(inputSource);
 	}
 

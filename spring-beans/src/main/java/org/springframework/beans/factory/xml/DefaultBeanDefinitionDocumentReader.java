@@ -127,7 +127,8 @@ public class DefaultBeanDefinitionDocumentReader implements BeanDefinitionDocume
 		// the new (child) delegate with a reference to the parent for fallback purposes,
 		// then ultimately reset this.delegate back to its original (parent) reference.
 		// this behavior emulates a stack of delegates without actually necessitating one.
-		// 注：this.delegate默认其实为空
+		// 注：this.delegate默认其实为空（是首次为空）
+		// 如果<beans/>标签中又含有<beans/>标签，那么会再次递归执行到此方法，此时的delegate就不再为空了
 		BeanDefinitionParserDelegate parent = this.delegate;
 		// 创建委托（BeanDefinitionParserDelegate类型），即将Bean的解析委托到这个类中进行,
 		// 同样要注意到的是这个委托对象内部是持有readerContext实例的，

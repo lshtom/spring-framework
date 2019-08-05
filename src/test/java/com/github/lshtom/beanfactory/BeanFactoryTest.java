@@ -10,16 +10,19 @@ import com.github.lshtom.beanfactory.custom_tag.User;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.xml.DefaultNamespaceHandlerResolver;
 import org.springframework.beans.factory.xml.XmlBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PropertiesLoaderUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Properties;
 
 @SuppressWarnings("deprecation")
 public class BeanFactoryTest {
@@ -121,5 +124,17 @@ public class BeanFactoryTest {
 		ApplicationContext bf = new ClassPathXmlApplicationContext("com/github/lshtom/beanfactory/beanFactoryTest.xml");
 		User user = bf.getBean("testCustomTag", User.class);
 		System.out.println(user.getUserName() + "," + user.getEmail());
+	}
+
+	/**
+	 * 测试扫描.handlers文件获取handler信息
+	 *
+	 * @throws Exception
+	 */
+	@Test
+	public void testNamespaceHandlerScan() throws Exception {
+		String location = DefaultNamespaceHandlerResolver.DEFAULT_HANDLER_MAPPINGS_LOCATION;
+		Properties mappings = PropertiesLoaderUtils.loadAllProperties(location);
+		System.out.println(mappings);
 	}
 }
