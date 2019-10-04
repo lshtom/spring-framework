@@ -16,19 +16,15 @@
 
 package org.springframework.beans.factory;
 
-import java.lang.annotation.Annotation;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.springframework.beans.BeansException;
 import org.springframework.core.ResolvableType;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
+
+import java.lang.annotation.Annotation;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Convenience methods operating on bean factories, in particular
@@ -80,9 +76,12 @@ public abstract class BeanFactoryUtils {
 	 */
 	public static String transformedBeanName(String name) {
 		Assert.notNull(name, "'name' must not be null");
+		// FACTORY_BEAN_PREFIX常量的值为&，
+		// 故若name中不含有前缀&，则属于一般情况，直接返回
 		if (!name.startsWith(BeanFactory.FACTORY_BEAN_PREFIX)) {
 			return name;
 		}
+		// 对应name中含有前缀&的，则去除掉前缀&并返回
 		return transformedBeanNameCache.computeIfAbsent(name, beanName -> {
 			do {
 				beanName = beanName.substring(BeanFactory.FACTORY_BEAN_PREFIX.length());

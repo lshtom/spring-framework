@@ -1142,9 +1142,11 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			@Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
 
 		descriptor.initParameterNameDiscovery(getParameterNameDiscoverer());
+		// descriptor.getDependencyType()的作用是获取依赖的类型
 		if (Optional.class == descriptor.getDependencyType()) {
 			return createOptionalDependency(descriptor, requestingBeanName);
 		}
+		// 如果依赖的类型为ObjectFactory/ObjectProvider，则需要特殊处理
 		else if (ObjectFactory.class == descriptor.getDependencyType() ||
 				ObjectProvider.class == descriptor.getDependencyType()) {
 			return new DependencyObjectProvider(descriptor, requestingBeanName);
@@ -1156,6 +1158,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			Object result = getAutowireCandidateResolver().getLazyResolutionProxyIfNecessary(
 					descriptor, requestingBeanName);
 			if (result == null) {
+				// 通用处理逻辑
 				result = doResolveDependency(descriptor, requestingBeanName, autowiredBeanNames, typeConverter);
 			}
 			return result;
@@ -1173,6 +1176,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				return shortcut;
 			}
 
+			// 对@Value注解的支持
 			Class<?> type = descriptor.getDependencyType();
 			Object value = getAutowireCandidateResolver().getSuggestedValue(descriptor);
 			if (value != null) {
@@ -1199,9 +1203,11 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				return multipleBeans;
 			}
 
+			// 根据依赖的属性类型去获取相匹配的Bean实例，并以当前的beanName为K，该依赖的Bean实例作为V返回
 			Map<String, Object> matchingBeans = findAutowireCandidates(beanName, type, descriptor);
 			if (matchingBeans.isEmpty()) {
 				if (isRequired(descriptor)) {
+					// 如果当前的依赖是必须注入的，但又没有找到符合的Bean，则报错
 					raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
 				}
 				return null;
@@ -1210,6 +1216,9 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			String autowiredBeanName;
 			Object instanceCandidate;
 
+			// 由于找到的符合条件的待注入的Bean可能多于1个，那么就需要进一步的筛选确认，得到唯一的
+			// 那为啥前面根据类型去获取Bean实例的时候可能获取到多于1个的呢？
+			// 那是因为有可能有两个Bean，其为父子关系，因此当按照父Bean的类型去获取的时候，子Bean也被获取到了
 			if (matchingBeans.size() > 1) {
 				autowiredBeanName = determineAutowireCandidate(matchingBeans, descriptor);
 				if (autowiredBeanName == null) {

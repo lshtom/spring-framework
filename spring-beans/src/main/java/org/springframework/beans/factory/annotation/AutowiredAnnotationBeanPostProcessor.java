@@ -16,37 +16,13 @@
 
 package org.springframework.beans.factory.annotation;
 
-import java.beans.PropertyDescriptor;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.AccessibleObject;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.PropertyValues;
 import org.springframework.beans.TypeConverter;
-import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.beans.factory.BeanFactoryUtils;
-import org.springframework.beans.factory.InjectionPoint;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.UnsatisfiedDependencyException;
+import org.springframework.beans.factory.*;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.DependencyDescriptor;
 import org.springframework.beans.factory.config.InstantiationAwareBeanPostProcessorAdapter;
@@ -64,6 +40,12 @@ import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StringUtils;
+
+import java.beans.PropertyDescriptor;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@link org.springframework.beans.factory.config.BeanPostProcessor} implementation
@@ -369,8 +351,12 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 
 	@Override
 	public PropertyValues postProcessProperties(PropertyValues pvs, Object bean, String beanName) {
+		// 获取待注入的依赖信息
+		// 比如：有Bean名为Person，其有属性Address，需要进行依赖注入，
+		// 那么通过下面方法返回的metadata则包括了当前Bean的名称（Person），需要注入的对象的类型及类描述信息（Field）等
 		InjectionMetadata metadata = findAutowiringMetadata(beanName, bean.getClass(), pvs);
 		try {
+			// 执行依赖注入
 			metadata.inject(bean, beanName, pvs);
 		}
 		catch (BeanCreationException ex) {
@@ -578,18 +564,24 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 
 		@Override
 		protected void inject(Object bean, @Nullable String beanName, @Nullable PropertyValues pvs) throws Throwable {
+			// 此处的实例变量member是在之前获取InjectionMetadata时，
+			// 进行InjectionMetadata实例创建的时候，在构造函数中赋值的
+			// field为当前待注入的依赖的Field实例
 			Field field = (Field) this.member;
 			Object value;
 			if (this.cached) {
 				value = resolvedCachedArgument(beanName, this.cachedFieldValue);
 			}
 			else {
+				// 由field和required标志位构建出依赖描述信息对象desc
 				DependencyDescriptor desc = new DependencyDescriptor(field, this.required);
 				desc.setContainingClass(bean.getClass());
 				Set<String> autowiredBeanNames = new LinkedHashSet<>(1);
+				// Tips：AutowiredAnnotationBeanPostProcessor实现了BeanFactoryAware，所以其可以拿到beanFactory实例
 				Assert.state(beanFactory != null, "No BeanFactory available");
 				TypeConverter typeConverter = beanFactory.getTypeConverter();
 				try {
+					// 进行依赖解析，得到待注入的依赖对象实例/值
 					value = beanFactory.resolveDependency(desc, beanName, autowiredBeanNames, typeConverter);
 				}
 				catch (BeansException ex) {
@@ -616,6 +608,7 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 					}
 				}
 			}
+			// 利用反射完成最终的依赖属性值的设置（赋值）
 			if (value != null) {
 				ReflectionUtils.makeAccessible(field);
 				field.set(bean, value);

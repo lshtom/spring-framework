@@ -1104,6 +1104,8 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 					"' on class [" + getBeanClassName() + "]");
 		}
 		else if (count == 1) {
+			// 找到的方法名只有一个，说明没有重载方法，故此处将打上相应的标记，
+			// 这样子到了后面真正的Bean实例的创建的时候就无需再进行判断了
 			// Mark override as not overloaded, to avoid the overhead of arg type checking.
 			mo.setOverloaded(false);
 		}

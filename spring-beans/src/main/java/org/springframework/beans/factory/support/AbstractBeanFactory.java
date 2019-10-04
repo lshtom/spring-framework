@@ -16,65 +16,21 @@
 
 package org.springframework.beans.factory.support;
 
-import java.beans.PropertyEditor;
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.BeanWrapper;
-import org.springframework.beans.BeansException;
-import org.springframework.beans.PropertyEditorRegistrar;
-import org.springframework.beans.PropertyEditorRegistry;
-import org.springframework.beans.PropertyEditorRegistrySupport;
-import org.springframework.beans.SimpleTypeConverter;
-import org.springframework.beans.TypeConverter;
-import org.springframework.beans.TypeMismatchException;
-import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.beans.factory.BeanCurrentlyInCreationException;
-import org.springframework.beans.factory.BeanDefinitionStoreException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryUtils;
-import org.springframework.beans.factory.BeanIsAbstractException;
-import org.springframework.beans.factory.BeanIsNotAFactoryException;
-import org.springframework.beans.factory.BeanNotOfRequiredTypeException;
-import org.springframework.beans.factory.CannotLoadBeanClassException;
-import org.springframework.beans.factory.FactoryBean;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.SmartFactoryBean;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanDefinitionHolder;
-import org.springframework.beans.factory.config.BeanExpressionContext;
-import org.springframework.beans.factory.config.BeanExpressionResolver;
-import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.beans.factory.config.ConfigurableBeanFactory;
-import org.springframework.beans.factory.config.DestructionAwareBeanPostProcessor;
-import org.springframework.beans.factory.config.InstantiationAwareBeanPostProcessor;
-import org.springframework.beans.factory.config.Scope;
+import org.springframework.beans.*;
+import org.springframework.beans.factory.*;
+import org.springframework.beans.factory.config.*;
 import org.springframework.core.DecoratingClassLoader;
 import org.springframework.core.NamedThreadLocal;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.lang.Nullable;
-import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
-import org.springframework.util.StringValueResolver;
+import org.springframework.util.*;
+
+import java.beans.PropertyEditor;
+import java.security.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Abstract base class for {@link org.springframework.beans.factory.BeanFactory}
@@ -201,6 +157,8 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 
 	@Override
 	public <T> T getBean(String name, Class<T> requiredType) throws BeansException {
+		// 其实doGetBean方法是一个通用方法，而getBean方法是有不同的重载方法，
+		// 但其内部调用的都是同一个doGetBean方法，只是传递的参数不同
 		return doGetBean(name, requiredType, null, false);
 	}
 
@@ -239,10 +197,17 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredType,
 			@Nullable final Object[] args, boolean typeCheckOnly) throws BeansException {
 
+		// 【步骤1】：对入参name进行转换，得到真正bean的名称
+		// 需要转换的原因是：name并不一定是Bean的真正名称，有可能是别名，也有可能是FactoryBean的名称
 		final String beanName = transformedBeanName(name);
 		Object bean;
 
 		// Eagerly check singleton cache for manually registered singletons.
+		// 【步骤2】：根据真正的Bean的名称beanName去尝试从缓存中获取单例Bean实例对象，
+		// 因为对于单例Bean而言，其实对象实例只会创建一次，一旦创建后是缓存在容器中的，
+		// 因此要先尝试从容器中获取下，若获取到则进行处理并返回。
+		// 但注意的是：通过getSingleton方法中所获取的Bean对象实例可能并非我们所想要的，
+		// 比如有可能获取到的是FactoryBean对象实例，但我们可能真正想获取的是FactoryBean所创建的那个Bean的对象实例
 		Object sharedInstance = getSingleton(beanName);
 		if (sharedInstance != null && args == null) {
 			if (logger.isTraceEnabled()) {
@@ -254,20 +219,35 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					logger.trace("Returning cached instance of singleton bean '" + beanName + "'");
 				}
 			}
+			// getObjectForBeanInstance方法就是为了解决前面提到的sharedInstance可能不是我们真正想要的对象的问题
+			// 经过getObjectForBeanInstance后，拿到真正的相应的Bean对象实例
 			bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
 		}
-
+		// 容器缓存中还没有缓存该单例Bean的对象实例，那么说明：
+		// 1）该单例Bean还没有被创建
+		// 2）或者，这个要获取的Bean的作用域不是单例，而是其他几种作用域
 		else {
 			// Fail if we're already creating this bean instance:
 			// We're assumably within a circular reference.
+			// 【步骤3】：Prototype类型的Bean的循环依赖检查
+			// 检查逻辑：假设A->B，B->A，
+			// 那么在创建A的时候，会将A的名称放到prototypesCurrentlyInCreation实例变量中，
+			// 而A中依赖了B，那么在进行B的创建的时候同样将B的名称放到prototypesCurrentlyInCreation中，
+			// 而在创建B时，又发现依赖有A，那么在创建A前，从prototypesCurrentlyInCreation检查下是否有A，
+			// 若有，则说明已经成环了。
+			// 在Spring中，只对单例Bean的循环依赖进行尝试解决，而对于其他类型的，直接报错
 			if (isPrototypeCurrentlyInCreation(beanName)) {
 				throw new BeanCurrentlyInCreationException(beanName);
 			}
 
 			// Check if bean definition exists in this factory.
+			// 【步骤4】：当前的加载的Bean没有配置信息（BeanDefinition）则尝试从父类工厂上去加载
+			// 注意条件是parentBeanFactory != null 及 !containsBeanDefinition(beanName)
 			BeanFactory parentBeanFactory = getParentBeanFactory();
 			if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
 				// Not found -> check parent.
+				// 获取原始的Bean的名称
+				// 根据不同的入参条件去递归调用父类的doGetBean方法/getBean方法来获取/创建Bean对象实例
 				String nameToLookup = originalBeanName(name);
 				if (parentBeanFactory instanceof AbstractBeanFactory) {
 					return ((AbstractBeanFactory) parentBeanFactory).doGetBean(
@@ -286,24 +266,54 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				}
 			}
 
+			// 运行到此处，表明：
+			// 1）缓存中没有当前Bean（不管是完全体的Bean还是早期Bean还是ObjectFactory缓存都没有）
+			// 2）父工厂为空或当前Bean有相应的定义信息（BeanDefinition）
+			// 意味着：接下来要根据当前Bean的定义信息（BeanDefnition）来进行Bean的创建
 			if (!typeCheckOnly) {
+				// 打个标记，表明当前Bean处于创建中（保存在alreadyCreated实例变量中）
 				markBeanAsCreated(beanName);
 			}
 
 			try {
+				// 【步骤5】：进行Bean类型转换和合并父Bean定义信息，得到RootBeanDefinition类型的统一的Bean定义信息
+				// 将之前解析并注册到容器中的Bean定义信息的实际类型（GenericBeanDefinition）转换为RootBeanDefinition类型，
+				// 同时，如果父Bean非空的话，则进行合并处理，
+				// 后续的Bean定义信息都统一为RootBeanDefinition类型,
+				// mbd为包含了父Bean的统一的Bean定义信息。
+				// Tips：GenericBeanDefinition和RootBeanDefinition和ChildBeanDefinition都继承自AbstractBeanDefinition
 				final RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
+				// 对统一的Bean定义信息进行校验
+				// checkMergedBeanDefinition方法的类型是protected，
+				// 其内部的默认实现是判断下mbd是否为抽象的，若是则校验不通过，
+				// 但是AbstractBeanFactory的子类可以覆盖其实现逻辑，
+				// 这也属于【模板方法】模式的应用
 				checkMergedBeanDefinition(mbd, beanName, args);
 
 				// Guarantee initialization of beans that the current bean depends on.
+				// 【步骤6】：确保当前要创建的Bean的所有显式前置依赖已经被初始化
+				// 注意：通过depends-on显式指定的依赖与Spring在处理构造器注入/属性注入时所进行的依赖注入的处理是不一样的，
+				// depends-on只是用来指明在创建BeanA之前必须先完成BeanB的创建初始化工作，而与属性注入/构造器注入没啥关系
 				String[] dependsOn = mbd.getDependsOn();
 				if (dependsOn != null) {
 					for (String dep : dependsOn) {
+						// 6-1)检测需要进行创建初始化的依赖Bean是否又依赖当前Bean
+						// 比如：当前正在创建BeanA，结果发现BeanA中依赖了BeanB，
+						// 那么isDependent方法就检测BeanB中是否又依赖BeanA
 						if (isDependent(beanName, dep)) {
 							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
 									"Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
 						}
+						// 6-2)注册显式依赖Bean
+						// 注意：该方法的两个入参是dep和beanName(反过来了)
+						// 此方法中进行依赖Bean注册的目的是将相应的依赖Bean注册到缓存中（K-V），
+						// 之后，遇到下一个使用了depends-on进行显式依赖指定时就可以判断是否有环(上面isDependent方法)
 						registerDependentBean(dep, beanName);
 						try {
+							// 6-3)递归调用getBean方法进行依赖Bean的创建
+							// 那为何此处无需取getBean方法的返回值呢？
+							// 那是因为通过getBean方法后完成了依赖Bean的创建，
+							// 依赖Bean的对象实例被缓存在了容器中
 							getBean(dep);
 						}
 						catch (NoSuchBeanDefinitionException ex) {
@@ -314,7 +324,22 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				}
 
 				// Create bean instance.
+				// 【步骤7】：针对不同的scope进行Bean的创建
+				// 7-1）单例Bean的创建
 				if (mbd.isSingleton()) {
+					// 注：对于getSingleton方法的第二个入参ObjectFactory接口，
+					// Spring的源码中使用了lambda表达式去实现，
+					// 而其等效的匿名内部类实现方式如下：
+					// 故而，在getSingleton方法中，当对于bjectFactory接口的方法getObject时,
+					// 其真正调用的是createBean方法
+					/**
+					getSingleton(beanName, new ObjectFactory<Object>() {
+						@Override
+						public Object getObject() throws BeansException {
+							return createBean(beanName, mbd, args);
+						}
+					});
+					 */
 					sharedInstance = getSingleton(beanName, () -> {
 						try {
 							return createBean(beanName, mbd, args);
@@ -330,6 +355,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
 				}
 
+				// 7-2）Prototype类型的Bean的创建
 				else if (mbd.isPrototype()) {
 					// It's a prototype -> create a new instance.
 					Object prototypeInstance = null;
@@ -343,6 +369,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					bean = getObjectForBeanInstance(prototypeInstance, name, beanName, mbd);
 				}
 
+				// 7-3）其他Scope类型的Bean的创建
 				else {
 					String scopeName = mbd.getScope();
 					final Scope scope = this.scopes.get(scopeName);
@@ -376,6 +403,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		}
 
 		// Check if required type matches the type of the actual bean instance.
+		// 【步骤8】：Bean类型转换
 		if (requiredType != null && !requiredType.isInstance(bean)) {
 			try {
 				T convertedBean = getTypeConverter().convertIfNecessary(bean, requiredType);
@@ -1139,8 +1167,12 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 * @return the original bean name
 	 */
 	protected String originalBeanName(String name) {
+		// 调用transformedBeanName方法的作用：
+		// 1）对于name中带有前缀&的进行处理（其实就是去掉前缀&）
+		// 2）对于第一步中得到的name进行别名检测，取得真实的名称
 		String beanName = transformedBeanName(name);
 		if (name.startsWith(FACTORY_BEAN_PREFIX)) {
+			// 如果name中是含有前缀&的，则在经过转换后得到的真实的beanName前加上&
 			beanName = FACTORY_BEAN_PREFIX + beanName;
 		}
 		return beanName;
@@ -1214,10 +1246,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 */
 	protected RootBeanDefinition getMergedLocalBeanDefinition(String beanName) throws BeansException {
 		// Quick check on the concurrent map first, with minimal locking.
+		// 1.首先从已经合并的Bean定义信息缓存中尝试获取一下，如果有则直接返回即可
 		RootBeanDefinition mbd = this.mergedBeanDefinitions.get(beanName);
 		if (mbd != null) {
 			return mbd;
 		}
+		// 2.若缓存中没有，则从容器中获取相应的BeanDefinition，
+		// 并合并父Bean的定义信息（如果有的话），同时将Bean定义信息的类型转换为RootBeanDefiniton
 		return getMergedBeanDefinition(beanName, getBeanDefinition(beanName));
 	}
 
@@ -1253,11 +1288,14 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			RootBeanDefinition mbd = null;
 
 			// Check with full lock now in order to enforce the same merged instance.
+			// 步骤1：在加了锁的情况下再次判断缓存中是否已有相应的Bean定义信息实例
 			if (containingBd == null) {
 				mbd = this.mergedBeanDefinitions.get(beanName);
 			}
 
 			if (mbd == null) {
+				// 步骤2：若缓存中没有，则进一步判断该Bean是否有父Bean，
+				// 若无，则将当前的Bean定义信息实例包装到RootBeanDefinition中
 				if (bd.getParentName() == null) {
 					// Use copy of given root bean definition.
 					if (bd instanceof RootBeanDefinition) {
@@ -1269,6 +1307,10 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				}
 				else {
 					// Child bean definition: needs to be merged with parent.
+					// 步骤3：若存在父Bean,则递归调用getMergedBeanDefinition方法获取父Bean的定义信息，
+					// 并将父Bean的定义信息实例pbd包装到RootBeanDefiniton中。
+					// 之所以要递归调用，那是因为父Bean之上可能还有父Bean，
+					// 而且父Bean中是含有了子Bean的定义信息了的，所以获取了父Bean的定义信息后无需再特意的去获取子Bean的定义信息。
 					BeanDefinition pbd;
 					try {
 						String parentBeanName = transformedBeanName(bd.getParentName());
@@ -1296,6 +1338,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					mbd.overrideFrom(bd);
 				}
 
+				// 步骤4：设置Bean的scope
 				// Set default singleton scope, if not configured before.
 				if (!StringUtils.hasLength(mbd.getScope())) {
 					mbd.setScope(RootBeanDefinition.SCOPE_SINGLETON);
@@ -1309,6 +1352,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					mbd.setScope(containingBd.getScope());
 				}
 
+				// 步骤5：将经过前面几步所获取到的RootBeanDefiniton类型的Bean定义信息实例缓存起来
 				// Cache the merged bean definition for the time being
 				// (it might still get re-merged later on in order to pick up metadata changes)
 				if (containingBd == null && isCacheBeanMetadata()) {
@@ -1373,9 +1417,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			throws CannotLoadBeanClassException {
 
 		try {
+			// 步骤1：判断是否已经有当前Bean的Class实例，若有则直接返回
 			if (mbd.hasBeanClass()) {
 				return mbd.getBeanClass();
 			}
+			// 步骤2：若尚未由当前Bean的Class实例，则需要进行解析：
+			// 主要就是由特定的（默认下是默认的类加载器）类加载器进行解析，
+			// 比如获取到类名，然后根据类名来获取相应的Class实例
 			if (System.getSecurityManager() != null) {
 				return AccessController.doPrivileged((PrivilegedExceptionAction<Class<?>>) () ->
 					doResolveBeanClass(mbd, typesToMatch), getAccessControlContext());
@@ -1409,8 +1457,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			// use the specified temporary class loader (e.g. in a weaving scenario).
 			ClassLoader tempClassLoader = getTempClassLoader();
 			if (tempClassLoader != null) {
+				// 如果tempClassLoader非空，那么dynamicLoader将指向tempClassLoader，
+				// 后面逻辑中用到的dynamicLoader就来自此
 				dynamicLoader = tempClassLoader;
 				freshResolve = true;
+				// 如果tempClassLoader属于DecoratingClassLoader类型的，
+				// 那么此处要将typesToMatch中指定的Class移除出去，不由DecoratingClassLoader进行加载，
+				// 而直接由父级的类加载器进行加载
 				if (tempClassLoader instanceof DecoratingClassLoader) {
 					DecoratingClassLoader dcl = (DecoratingClassLoader) tempClassLoader;
 					for (Class<?> typeToMatch : typesToMatch) {
@@ -1643,10 +1696,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			Object beanInstance, String name, String beanName, @Nullable RootBeanDefinition mbd) {
 
 		// Don't let calling code try to dereference the factory if the bean isn't a factory.
+		// 步骤1：检查name是否为FactoryBean引用，并对beanInstance的类型进行校验
+		// isFactoryDereference判断是否是引用FactoryBean实例，即name中是否含有前缀&
 		if (BeanFactoryUtils.isFactoryDereference(name)) {
 			if (beanInstance instanceof NullBean) {
 				return beanInstance;
 			}
+			// 需要的是FactoryBean实例，但是beanInstance却不是，所以报错
 			if (!(beanInstance instanceof FactoryBean)) {
 				throw new BeanIsNotAFactoryException(beanName, beanInstance.getClass());
 			}
@@ -1655,10 +1711,15 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		// Now we have the bean instance, which may be a normal bean or a FactoryBean.
 		// If it's a FactoryBean, we use it to create a bean instance, unless the
 		// caller actually wants a reference to the factory.
+		// 步骤2：返回普通Bean对象实例或FactoryBean对象实例
+		// 因为经过步骤1的校验，如果name的前缀为&，则beanInstance一定为FactoryBean实例，
+		// 否则，那就是一个普通Bean对象实例
 		if (!(beanInstance instanceof FactoryBean) || BeanFactoryUtils.isFactoryDereference(name)) {
 			return beanInstance;
 		}
 
+		// 步骤3：由FactoryBean来创建Bean对象实例
+		// 走到此步，说明name中不含前缀&，且beanInstance为FactoryBean类型
 		Object object = null;
 		if (mbd == null) {
 			object = getCachedObjectForFactoryBean(beanName);
@@ -1668,9 +1729,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			FactoryBean<?> factory = (FactoryBean<?>) beanInstance;
 			// Caches object obtained from FactoryBean if it is a singleton.
 			if (mbd == null && containsBeanDefinition(beanName)) {
+				// 如果beanName是子Bean的名称的话，那此方法中还会合并父Bean的定义信息，
+				// 同时转换成RootBeanDefinition类型返回
 				mbd = getMergedLocalBeanDefinition(beanName);
 			}
 			boolean synthetic = (mbd != null && mbd.isSynthetic());
+			// 从FactoryBean中获取Bean的实例
+			// 内部逻辑是：先从相应的缓存拿，若无再进行创建
 			object = getObjectFromFactoryBean(factory, beanName, !synthetic);
 		}
 		return object;
@@ -1721,11 +1786,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				// Register a DisposableBean implementation that performs all destruction
 				// work for the given bean: DestructionAwareBeanPostProcessors,
 				// DisposableBean interface, custom destroy method.
+				// 注册单例scope的销毁处理逻辑（Bean）
 				registerDisposableBean(beanName,
 						new DisposableBeanAdapter(bean, beanName, mbd, getBeanPostProcessors(), acc));
 			}
 			else {
 				// A bean with a custom scope...
+				// 注册自定义scope的销毁处理逻辑（Bean）
 				Scope scope = this.scopes.get(mbd.getScope());
 				if (scope == null) {
 					throw new IllegalStateException("No Scope registered for scope name '" + mbd.getScope() + "'");

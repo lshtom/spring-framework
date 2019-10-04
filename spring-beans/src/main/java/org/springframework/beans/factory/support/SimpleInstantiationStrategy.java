@@ -16,13 +16,6 @@
 
 package org.springframework.beans.factory.support;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedExceptionAction;
-
 import org.springframework.beans.BeanInstantiationException;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.BeanFactory;
@@ -30,6 +23,13 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StringUtils;
+
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.security.PrivilegedExceptionAction;
 
 /**
  * Simple object instantiation strategy for use in a BeanFactory.
@@ -60,10 +60,12 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 	@Override
 	public Object instantiate(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner) {
 		// Don't override the class with CGLIB if no overrides.
+		// 如果有需要覆盖或动态替换的方法则使用CGLIB进行动态代理，否则直接反射创建对象即可
 		if (!bd.hasMethodOverrides()) {
 			Constructor<?> constructorToUse;
 			synchronized (bd.constructorArgumentLock) {
 				constructorToUse = (Constructor<?>) bd.resolvedConstructorOrFactoryMethod;
+				// 从缓存(resolvedConstructorOrFactoryMethod)中获取构造函数，若缓存中没有则获取默认的构造函数
 				if (constructorToUse == null) {
 					final Class<?> clazz = bd.getBeanClass();
 					if (clazz.isInterface()) {
@@ -75,8 +77,11 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 									(PrivilegedExceptionAction<Constructor<?>>) clazz::getDeclaredConstructor);
 						}
 						else {
+							// 方法原型为：public Constructor<T> getDeclaredConstructor(Class<?>... parameterTypes)
+							// 故在调用getDeclaredConstructor方法时没有传参，则其获取到的是默认的构造函数
 							constructorToUse = clazz.getDeclaredConstructor();
 						}
+						// 缓存构造函数
 						bd.resolvedConstructorOrFactoryMethod = constructorToUse;
 					}
 					catch (Throwable ex) {
@@ -84,10 +89,12 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 					}
 				}
 			}
+			// 根据构造函数进行对象实例的创建
 			return BeanUtils.instantiateClass(constructorToUse);
 		}
 		else {
 			// Must generate CGLIB subclass.
+			// 使用CGLIB创建代理对象
 			return instantiateWithMethodInjection(bd, beanName, owner);
 		}
 	}

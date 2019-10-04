@@ -16,6 +16,14 @@
 
 package org.springframework.beans.factory.annotation;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.MutablePropertyValues;
+import org.springframework.beans.PropertyValues;
+import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.lang.Nullable;
+import org.springframework.util.ReflectionUtils;
+
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -24,15 +32,6 @@ import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
-import org.springframework.beans.MutablePropertyValues;
-import org.springframework.beans.PropertyValues;
-import org.springframework.beans.factory.support.RootBeanDefinition;
-import org.springframework.lang.Nullable;
-import org.springframework.util.ReflectionUtils;
 
 /**
  * Internal class for managing injection metadata.
@@ -83,6 +82,7 @@ public class InjectionMetadata {
 		Collection<InjectedElement> elementsToIterate =
 				(checkedElements != null ? checkedElements : this.injectedElements);
 		if (!elementsToIterate.isEmpty()) {
+			// 遍历每一个需要依赖注入的元素（属性），执行依赖注入
 			for (InjectedElement element : elementsToIterate) {
 				if (logger.isTraceEnabled()) {
 					logger.trace("Processing injected element of bean '" + beanName + "': " + element);
