@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<bean id="testBean" class="com.github.lshtom.beanfactory.bean.instantiation_aware_bean_post_processor.TestBean" autowire="byType">
+		<property name="name" value="测试"/>
+		<property name="age" value="23"/>
+		<property name="address" value="广东省佛山市"/>
+		<property name="testBean2" ref="testBean2"/>
+	</bean>
+
+	<bean id="testBean2" class="com.github.lshtom.beanfactory.bean.instantiation_aware_bean_post_processor.TestBean2">
+		<property name="name" value="测试2"/>
+		<property name="address" value="广东省深圳市"/>
+	</bean>
+</beans>
