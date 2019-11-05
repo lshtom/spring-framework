@@ -615,7 +615,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			Object earlySingletonReference = getSingleton(beanName, false);
 			if (earlySingletonReference != null) {
 				// 两者相等，表明没有在初始化方法initializeBean中被改变，即没有被增强
+				// Tips：在上面的步骤4.2中所调用的initializeBean方法中调用的BeanPostProcessor后置处理方法postProcessBeforeInitialization
+				// 和postProcessAfterInitialization方法可能会对Bean进行包装，进行增强，返回代理类对象，
+				// 因此两者就会出现不等。
 				if (exposedObject == bean) {
+					// 为啥要用earlySingletonReference赋值给exposedObject呢？疑问
 					exposedObject = earlySingletonReference;
 				}
 				else if (!this.allowRawInjectionDespiteWrapping && hasDependentBean(beanName)) {
@@ -626,12 +630,15 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 					for (String dependentBean : dependentBeans) {
 						// 依赖检测：removeSingletonIfCreatedForTypeCheckOnly方法中检测dependentBean是否已经完成了创建，
 						// 如果还没创建，则返回false，也就说明这个依赖是没有解决的，然后加入得到actualDependentBeans中
+						// 这注释不对！感觉Spring是对于被增强的Bean，如果检测到有循环依赖的,都是被认为非正常情况。
+						// 上面的注释并不正确，返回false并非意味着没创建！！！
 						if (!removeSingletonIfCreatedForTypeCheckOnly(dependentBean)) {
 							actualDependentBeans.add(dependentBean);
 						}
 					}
 					// 对于已经解决(能解决)的循环依赖，当前Bean所依赖的其它Bean的实例肯定是已经被创建了的，
 					// 如果存在未创建的，那也说明着依赖无法解决了，所以报错。
+					// 这个注释也不对！！！下面的报错的报错信息才是真正的官方解析！
 					if (!actualDependentBeans.isEmpty()) {
 						throw new BeanCurrentlyInCreationException(beanName,
 								"Bean with name '" + beanName + "' has been injected into other beans [" +
@@ -958,6 +965,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 	 * @return the object to expose as bean reference
 	 */
 	protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
+		// 假设没有回调任何的后置处理器，那么exposedObject的实例就为bean实例
+		// Tips：此时的这个Bean实例其实是仅仅创建完成而已，还没属性填充呢（这在后头）
 		Object exposedObject = bean;
 		if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
 			for (BeanPostProcessor bp : getBeanPostProcessors()) {
@@ -1447,6 +1456,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 		// 【步骤3】：Spring根据类型/名称自动进行属性值获取
 		// 注意：获取到的属性值并没有被直接应用到当前Bean实例中，
 		// 这也是给后面的后置处理器一个机会来改变属性值（注：是改变即将复制给Bean的属性值）
+		// Tips:只有在XML配置文件中<bean/>标签中使用了autowire属性来指定注入类型（byName或byType）才会执行下面的autowireByName和autowireByType方法，
+		// 对于使用注解@Autowire并不是在这里进行处理的。
 		PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
 
 		if (mbd.getResolvedAutowireMode() == AUTOWIRE_BY_NAME || mbd.getResolvedAutowireMode() == AUTOWIRE_BY_TYPE) {
@@ -1494,7 +1505,10 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 						// postProcessPropertyValues后置处理方法与前面的postProcessProperties方法的作用是类似的，
 						// 其实都是给一个机会来让用户可以在属性值被设置到Bean实例之前对属性值进行修改，
 						// 这两个方法的区别在于postProcessPropertyValues方法的入参中多了属性描述入参（filteredPds），
-						// 有了这个参数的话，可以了解到要注入的属性信息，其中@Required注解的处理就是在该后置处理方法中进行的校验
+						// 有了这个参数的话，可以了解到要注入的属性信息，其中@Required注解的处理就是在该后置处理方法中进行的校验。
+						// @Required注解的后置处理放在此处也是合理的，
+						// 因为诸如@Autowired注解的后置处理已经在上头的postProcessProperties方法中处理了，如果有值，那就不会执行到此处，
+						// 也就无需进行@Required注解的后置处理了（毕竟都有值了，再处理就是多此一举了）。
 						pvsToUse = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
 						if (pvsToUse == null) {
 							return;
@@ -1539,6 +1553,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				Object bean = getBean(propertyName);
 				pvs.add(propertyName, bean);
 				// 注册依赖
+				// Tips:属性名propertyName会作为Key保存在dependentBeanMap中，
+				// 其实可以理解为所依赖的属性会作为Key存在dependentBeanMap中，
+				// 所以如果发生循环依赖，那么当前Bean的名称反而会作为Key存在（因为被别的Bean作为依赖属性了）。
 				registerDependentBean(propertyName, beanName);
 				if (logger.isTraceEnabled()) {
 					logger.trace("Added autowiring by name from bean name '" + beanName +
@@ -1585,7 +1602,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 				PropertyDescriptor pd = bw.getPropertyDescriptor(propertyName);
 				// Don't try autowiring by type for type Object: never makes sense,
 				// even if it technically is a unsatisfied, non-simple property.
-				// 对于Object类型的属性不会进行依赖注入处理
+				// 对于Object类型的属性不会进行依赖注入处理(因为Object可以对应任何对象属性，无法区分)
 				if (Object.class != pd.getPropertyType()) {
 					// 获取当前需注入的属性的setter方法的入参
 					MethodParameter methodParam = BeanUtils.getWriteMethodParameter(pd);

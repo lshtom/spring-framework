@@ -402,12 +402,19 @@ class ConstructorResolver {
 		boolean isStatic;
 
 		String factoryBeanName = mbd.getFactoryBeanName();
+		// 由于工厂方法也是有相应的实现类的，
+		// 因此如果要通过工厂方法来实现Bean的创建的话，
+		// 那就必须要获取实现了这个工厂方法的类的类型，并存到factoryClass中。
+		// 这样子就有两种情形：
+		// 情形1：当前欲加载的Bean就实现了<bean/>标签中所指定的factory-method，也就是说factoryClass就是当前Bean的类型
+		// 情形2：当前欲加载的Bean的定义<bean/>标签中同时使用了factory-bean和factory-method属性，
+		//       也就是通过工厂Bean中所实现的工厂方法来加载当前Bean（当前Bean和工厂Bean不是同一个）
 		if (factoryBeanName != null) {
 			if (factoryBeanName.equals(beanName)) {
 				throw new BeanDefinitionStoreException(mbd.getResourceDescription(), beanName,
 						"factory-bean reference points back to the same bean definition");
 			}
-			// 工厂方法实现类也是也给Bean实例，所以要先从容器中获取该工厂实例，然后再利用该工厂实例完成相应Bean的创建
+			// 工厂方法实现类也是个Bean实例，所以要先从容器中获取该工厂实例，然后再利用该工厂实例完成相应Bean的创建
 			factoryBean = this.beanFactory.getBean(factoryBeanName);
 			if (mbd.isSingleton() && this.beanFactory.containsSingleton(beanName)) {
 				// 已经创建过了，再次创建报错

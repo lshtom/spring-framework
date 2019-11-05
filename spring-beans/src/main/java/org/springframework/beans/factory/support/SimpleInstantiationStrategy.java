@@ -95,6 +95,8 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 		else {
 			// Must generate CGLIB subclass.
 			// 使用CGLIB创建代理对象
+			// 【模板方法模式】：instantiateWithMethodInjection也是定义在当前类中的一个protected方法，
+			// 其将会由具体实现类（比如CglibSubclassingInstantiationStrategy类）来进行覆盖实现
 			return instantiateWithMethodInjection(bd, beanName, owner);
 		}
 	}

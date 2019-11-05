@@ -276,7 +276,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			}
 
 			try {
-				// 【步骤5】：进行Bean类型转换和合并父Bean定义信息，得到RootBeanDefinition类型的统一的Bean定义信息
+				// 【步骤5】：进行Bean定义信息类型转换和合并父Bean定义信息，得到RootBeanDefinition类型的统一的Bean定义信息
 				// 将之前解析并注册到容器中的Bean定义信息的实际类型（GenericBeanDefinition）转换为RootBeanDefinition类型，
 				// 同时，如果父Bean非空的话，则进行合并处理，
 				// 后续的Bean定义信息都统一为RootBeanDefinition类型,
@@ -1310,13 +1310,16 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					// 步骤3：若存在父Bean,则递归调用getMergedBeanDefinition方法获取父Bean的定义信息，
 					// 并将父Bean的定义信息实例pbd包装到RootBeanDefiniton中。
 					// 之所以要递归调用，那是因为父Bean之上可能还有父Bean，
-					// 而且父Bean中是含有了子Bean的定义信息了的，所以获取了父Bean的定义信息后无需再特意的去获取子Bean的定义信息。
+					// 而且父Bean中是含有了子Bean的定义信息了的，所以获取了父Bean的定义信息后无需再特意的去获取子Bean的定义信息?
+					// 上面这句话说得不对，因为后面还是调用了mbd.overrideFrom(bd)，就是获取子BeanDefiniton的配置信息去设置
 					BeanDefinition pbd;
 					try {
 						String parentBeanName = transformedBeanName(bd.getParentName());
+						// 父BeanDefinition的名称和当前BeanDefiniton的名称不同，说明其在同一个容器下
 						if (!beanName.equals(parentBeanName)) {
 							pbd = getMergedBeanDefinition(parentBeanName);
 						}
+						// 如果两者名称相同，那肯定不在同一个容器中，那就必须向上从父容器中去获取父BeanDefiniton
 						else {
 							BeanFactory parent = getParentBeanFactory();
 							if (parent instanceof ConfigurableBeanFactory) {

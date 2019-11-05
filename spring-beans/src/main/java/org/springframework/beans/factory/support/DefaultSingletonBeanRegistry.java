@@ -522,6 +522,7 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 
 		// 因此，如果在调用当前的方法getDependentBeans，入参当前Bean的名称"person"，然后返回值非空时，
 		// 就表明存在循环依赖了！！！
+		// 感觉不太对，只能说明是存在依赖，但并非一定是循环依赖！
 		Set<String> dependentBeans = this.dependentBeanMap.get(beanName);
 		if (dependentBeans == null) {
 			return new String[0];
