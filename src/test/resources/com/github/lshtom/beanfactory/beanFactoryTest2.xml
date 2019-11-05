@@ -7,9 +7,11 @@
 		<property name="carinfo" value="超级跑车,400,2000000"/>
 	</bean>
 
-	<bean id="testA" class="com.github.lshtom.beanfactory.bean.circular.TestA" depends-on="testB">
+	<bean id="testA" class="com.github.lshtom.beanfactory.bean.circular.TestA">
+		<property name="testB" ref="testB"/>
  	</bean>
 
-	<bean id="testB" class="com.github.lshtom.beanfactory.bean.circular.TestB" depends-on="testA">
+	<bean id="testB" class="com.github.lshtom.beanfactory.bean.circular.TestB">
+		<property name="testA" ref="testA"/>
 	</bean>
 </beans>

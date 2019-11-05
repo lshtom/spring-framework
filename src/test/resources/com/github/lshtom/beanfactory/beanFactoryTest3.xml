@@ -14,4 +14,10 @@
 		<property name="name" value="测试2"/>
 		<property name="address" value="广东省深圳市"/>
 	</bean>
+
+	<bean id="myCar" class="com.github.lshtom.beanfactory.bean.factorymethod.Car" factory-method="getCar" >
+		<constructor-arg value="400"/>
+		<constructor-arg value="宝马730"/>
+		<constructor-arg value="1000000"/>
+	</bean>
 </beans>

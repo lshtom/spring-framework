@@ -21,6 +21,13 @@ public class BeanFactoryTest2 {
 		System.out.println(car);
 	}
 
+	@Test
+	public void testCircularDependency() {
+		BeanFactory bf = new XmlBeanFactory(new ClassPathResource("com/github/lshtom/beanfactory/beanFactoryTest2.xml"));
+		Object obj = bf.getBean("testA");
+		System.out.println(obj);
+	}
+
 	/**
 	 * 测试显式依赖depends-on
 	 * 说明：在BeanA上使用depends-on指定BeanB，
@@ -47,5 +54,15 @@ public class BeanFactoryTest2 {
 		//((XmlBeanFactory) bf).addBeanPostProcessor(new BeanPostProcessor());
 		TestBean testBean = bf.getBean(TestBean.class);
 		System.out.println(testBean);
+	}
+
+	/**
+	 * 测试工厂方法的使用
+	 */
+	@Test
+	public void testFactoryMethod() {
+		BeanFactory bf = new XmlBeanFactory(new ClassPathResource("com/github/lshtom/beanfactory/beanFactoryTest3.xml"));
+		Object car =  bf.getBean("myCar");
+		System.out.println(car);
 	}
 }
