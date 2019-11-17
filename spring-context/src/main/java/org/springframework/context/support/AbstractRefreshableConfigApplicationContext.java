@@ -78,6 +78,7 @@ public abstract class AbstractRefreshableConfigApplicationContext extends Abstra
 			Assert.noNullElements(locations, "Config locations must not be null");
 			this.configLocations = new String[locations.length];
 			for (int i = 0; i < locations.length; i++) {
+				// resolvePath方法中会调用getEnvironment方法，Environment的实例就是在此处创建的
 				this.configLocations[i] = resolvePath(locations[i]).trim();
 			}
 		}
@@ -122,6 +123,11 @@ public abstract class AbstractRefreshableConfigApplicationContext extends Abstra
 	 * @see org.springframework.core.env.Environment#resolveRequiredPlaceholders(String)
 	 */
 	protected String resolvePath(String path) {
+		// getEnvironment方法中的逻辑是比较简单的：就是如果有Environment实例则返回，否则创建并返回
+		// 对于首次加载Environment，其会进行Environment的创建，类型为StandardEnvironment，
+		// 在StandardEnvironment类的父类AbstractEnvironment的构造器中，会调用子类StandardEnvironment所覆写的customizePropertySources方法(类似于【建造者模式】),
+		// 在customizePropertySources方法中会利用Java提供的System.getProperties()方法和System.getenv()方法来分别获取系统属性和系统环境变量，
+		// 并保存到environment实例中。
 		return getEnvironment().resolveRequiredPlaceholders(path);
 	}
 

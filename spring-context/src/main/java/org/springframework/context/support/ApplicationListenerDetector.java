@@ -16,18 +16,17 @@
 
 package org.springframework.context.support;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.beans.factory.config.DestructionAwareBeanPostProcessor;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ApplicationEventMulticaster;
 import org.springframework.util.ObjectUtils;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@code BeanPostProcessor} that detects beans which implement the {@code ApplicationListener}
@@ -58,6 +57,8 @@ class ApplicationListenerDetector implements DestructionAwareBeanPostProcessor, 
 
 	@Override
 	public void postProcessMergedBeanDefinition(RootBeanDefinition beanDefinition, Class<?> beanType, String beanName) {
+		// 此处是将所有BeanDefiniton的Scope给缓存下来，
+		// 后面在进行监听器注册的时候需要去判断当前检测到的监听器Bean是否为单例的，如是则注册。
 		this.singletonNames.put(beanName, beanDefinition.isSingleton());
 	}
 
@@ -72,10 +73,12 @@ class ApplicationListenerDetector implements DestructionAwareBeanPostProcessor, 
 			// potentially not detected as a listener by getBeanNamesForType retrieval
 			Boolean flag = this.singletonNames.get(beanName);
 			if (Boolean.TRUE.equals(flag)) {
+				// 只有单例的监听器Bean会被注册
 				// singleton bean (top-level or inner): register on the fly
 				this.applicationContext.addApplicationListener((ApplicationListener<?>) bean);
 			}
 			else if (Boolean.FALSE.equals(flag)) {
+				// 只有单例Bean监听器才会被注册
 				if (logger.isWarnEnabled() && !this.applicationContext.containsBean(beanName)) {
 					// inner bean with other scope - can't reliably process events
 					logger.warn("Inner bean '" + beanName + "' implements ApplicationListener interface " +
@@ -93,6 +96,8 @@ class ApplicationListenerDetector implements DestructionAwareBeanPostProcessor, 
 	public void postProcessBeforeDestruction(Object bean, String beanName) {
 		if (bean instanceof ApplicationListener) {
 			try {
+				// 针对监听器Bean的销毁处理逻辑主要就是将这些监听器Bean从广播器中卸载下来，
+				// 这样子就消除从广播器指向这些监听器Bean的强引用了。
 				ApplicationEventMulticaster multicaster = this.applicationContext.getApplicationEventMulticaster();
 				multicaster.removeApplicationListener((ApplicationListener<?>) bean);
 				multicaster.removeApplicationListenerBean(beanName);
@@ -105,6 +110,7 @@ class ApplicationListenerDetector implements DestructionAwareBeanPostProcessor, 
 
 	@Override
 	public boolean requiresDestruction(Object bean) {
+		// 意思是实现了Spring监听器的Bean需要销毁（即需要被相应的销毁后置处理器进行处理）
 		return (bean instanceof ApplicationListener);
 	}
 

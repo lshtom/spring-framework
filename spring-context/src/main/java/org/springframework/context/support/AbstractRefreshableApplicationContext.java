@@ -16,14 +16,14 @@
 
 package org.springframework.context.support;
 
-import java.io.IOException;
-
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextException;
 import org.springframework.lang.Nullable;
+
+import java.io.IOException;
 
 /**
  * Base class for {@link org.springframework.context.ApplicationContext}
@@ -122,15 +122,35 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 	 */
 	@Override
 	protected final void refreshBeanFactory() throws BeansException {
+		// 【步骤1】：若已经存在BeanFactory实例，则先销毁该BeanFactory的所有Bean，再关闭BeanFactory
 		if (hasBeanFactory()) {
+			// destroyBeans方法内部所调用的各种逻辑主要就是干一件事：对单例Bean进行销毁，
+			// 而销毁Bean的逻辑又包括两大部分：
+			// 1）从BeanFactory容器中的singletonObjects、singletonFactories、
+			// earlySingletonObjects和registeredSingletons中根据Bean的名称一一清除掉所缓存的相应的实例（就是循环调用remove放方法）；
+			// 2）回调销毁逻辑（DisposableBean的destroy方法）
 			destroyBeans();
+			// 关闭容器的内部逻辑比较简单：就是serializationId设置为null，beanFactory实例变量置为null
 			closeBeanFactory();
 		}
 		try {
+			// 【步骤2】：创建DefaultListableBeanFactory类型的BeanFactory对象实例，并设置serializationId
 			DefaultListableBeanFactory beanFactory = createBeanFactory();
+			// serializationId是反序列化时有用到，具体怎么使用不太清楚？
 			beanFactory.setSerializationId(getId());
+
+			// 【步骤3】：定制BeanFactory
+			// 注：该方法的内部逻辑比较简单，就是设置是否允许覆盖同名的BeanDefiniton和设置是否允许循环依赖
+			// Tips：该方法为protected类型，意味着不同的子类可以覆写该方法，从而实现定制化逻辑，
+			// 这也是Spring利用【模板方法模式】来实现扩展点的一种方式。
 			customizeBeanFactory(beanFactory);
+
+			// 【步骤4】：读取XML配置文件并进行Bean的加载注册（BeanDefiniton）
 			loadBeanDefinitions(beanFactory);
+
+			// 【步骤5】：将完成初始化（加载完BeanDefinition）的BeanFacotry实例赋给beanFactory实例变量
+			// Tips：BeanFactory对于Bean的处理采用的是懒加载模式，
+			// 所以此时仅仅是完成了BeanDefinition的加载注册，而没有进行Bean的加载注册。
 			synchronized (this.beanFactoryMonitor) {
 				this.beanFactory = beanFactory;
 			}

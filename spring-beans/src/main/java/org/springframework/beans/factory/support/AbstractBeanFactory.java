@@ -888,6 +888,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	public void addBeanPostProcessor(BeanPostProcessor beanPostProcessor) {
 		Assert.notNull(beanPostProcessor, "BeanPostProcessor must not be null");
 		// Remove from old position, if any
+		// 当要添加新的BeanPostProcessor后置处理器时，先将旧的给移除，避免重复添加，导致后面的重复回调
 		this.beanPostProcessors.remove(beanPostProcessor);
 		// Track whether it is instantiation/destruction aware
 		if (beanPostProcessor instanceof InstantiationAwareBeanPostProcessor) {
@@ -1208,6 +1209,9 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		if (!this.propertyEditorRegistrars.isEmpty()) {
 			for (PropertyEditorRegistrar registrar : this.propertyEditorRegistrars) {
 				try {
+					// 从registrar的registerCustomEditors方法中回调registry的相关方法，将PropertyEditor注册到registry的实现类中,
+					// 而PropertyEditorRegistry最为主要的实现类就是BeanWrapper接口的实现类BeanWrapperImpl(BeanWrapper接口继承了PropertyEditorRegistry接口)，
+					// 也就是说每一个Bean实例的包装类BeanWrapperImpl均实现了PropertyEditorRegistry,即持有所有的PropertyEditor。
 					registrar.registerCustomEditors(registry);
 				}
 				catch (BeanCreationException ex) {

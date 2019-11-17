@@ -16,8 +16,6 @@
 
 package org.springframework.context.support;
 
-import java.io.IOException;
-
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.xml.ResourceEntityResolver;
@@ -25,6 +23,8 @@ import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.Resource;
 import org.springframework.lang.Nullable;
+
+import java.io.IOException;
 
 /**
  * Convenient base class for {@link org.springframework.context.ApplicationContext}
@@ -80,16 +80,29 @@ public abstract class AbstractXmlApplicationContext extends AbstractRefreshableC
 	@Override
 	protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
 		// Create a new XmlBeanDefinitionReader for the given BeanFactory.
+		// 【步骤1】：为指定的BeanFactory实例创建相应的XmlBeanDefinitionReader对象
+		// Tips：特别留意XmlBeanDefinitionReader构造器的入参为beanFactory对象实例,
+		// 这意味着XmlBeanDefinitionReader对象实例中将持有beanFactory对象实例，
+		// 因此在后面进行XML配置文件读取后进行BeanDefinition的注册将是注册到此beanFactory对象中，
+		// 这也是对象实例传递的过程。
 		XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
 
 		// Configure the bean definition reader with this context's
 		// resource loading environment.
+		// 【步骤2】：设置环境变量、资源加载器、解析器等,后面进行XML配置文件的读取和解析会用到
 		beanDefinitionReader.setEnvironment(this.getEnvironment());
+		// Tips：在AbstractApplicationContext中继承了DefaultResourceLoader类，因此此处的入参为this，
+		// 也可以理解为使用默认的资源加载器DefaultResourceLoader。
 		beanDefinitionReader.setResourceLoader(this);
 		beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
 
 		// Allow a subclass to provide custom initialization of the reader,
 		// then proceed with actually loading the bean definitions.
+		// 【步骤3】：初始化beanDefinitionReader并利用其进行XML配置文件的读取解析和BeanDefinition的加载注册
+		// Tips：下面这两个方法都可以由子类进行覆写，但是上面官方的注释特别提到了initBeanDefinitionReader方法，
+		// 这么设计的主要目的就是提供一个机会让使用者能够定制化针对beanDefinitionReader的初始化逻辑,
+		// 嗯，这既是Spring的设计哲学，利用模板方法、工厂方法等面向继承的设计模式来提供扩展点，
+		// 同时，在执行流上，除了使用这些面向继承的设计模式外，还采用回调这种机制（回调后置处理器）来让用户能够以插件形式注册自己的定制化处理逻辑。
 		initBeanDefinitionReader(beanDefinitionReader);
 		loadBeanDefinitions(beanDefinitionReader);
 	}
