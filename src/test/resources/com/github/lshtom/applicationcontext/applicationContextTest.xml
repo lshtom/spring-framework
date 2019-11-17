@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	   xmlns:myname="http://www.lexueba.com/schema/user"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+							http://www.lexueba.com/schema/user http://www.lexueba.com/schema/user.xsd"
+		>
+
+	<bean id="userManager" class="com.github.lshtom.applicationcontext.propertyEditor.UserManager">
+		<property name="dataValue" value="2013-03-15"/>
+ 	</bean>
+	<!--通过BeanFactory后置处理器将自定义的属性编辑器注册器给添加到属性编辑器注册器列表中-->
+	<bean id="myBeanFactoryPostProcessor" class="com.github.lshtom.applicationcontext.propertyEditor.MyBeanFactoryPostProcessor"/>
+
+
+</beans>
