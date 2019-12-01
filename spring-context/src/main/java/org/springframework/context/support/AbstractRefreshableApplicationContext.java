@@ -145,7 +145,7 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 			// 这也是Spring利用【模板方法模式】来实现扩展点的一种方式。
 			customizeBeanFactory(beanFactory);
 
-			// 【步骤4】：读取XML配置文件并进行Bean的加载注册（BeanDefiniton）
+			// 【步骤4】：读取XML配置文件并进行Bean定义的加载注册（BeanDefiniton）
 			loadBeanDefinitions(beanFactory);
 
 			// 【步骤5】：将完成初始化（加载完BeanDefinition）的BeanFacotry实例赋给beanFactory实例变量

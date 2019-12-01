@@ -814,7 +814,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	 * Use parent's if none defined in this context.
 	 */
 	protected void initMessageSource() {
-		// 总述:此方法的的逻辑就是找到实习了MessageSource接口的Bean，并获取该Bean实例然后赋值给AbstractApplicationContext实例变量messageSource,
+		// 总述:此方法的的逻辑就是找到实现了MessageSource接口的Bean，并获取该Bean实例然后赋值给AbstractApplicationContext实例变量messageSource,
 		// 如果没找到这样的Bean实例，则提供个默认实现，反正initMessageSource方法中关键的就是给messageSource实例变量赋值，即所谓的加载国际化消息源。
 		// Tips：突然发现，这其实也是一种实现可拓展的方式，即先查找容器中是否有id为XXX的Bean，若有则xxx,否则使用默认实现，
 		// 这种可拓展的方式比较解耦，毕竟只是定义个Bean，而无需手动做其他注册操作。

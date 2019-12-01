@@ -345,7 +345,7 @@ public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
 					"IOException parsing XML document from " + encodedResource.getResource(), ex);
 		}
 		finally {
-			// 执行到此，当前资源文件已经加载完毕了，Bean也注册到Spring容器中了
+			// 执行到此，当前资源文件已经加载完毕了，Bean定义信息也注册到Spring容器中了
 			// 移除掉已经加载了的资源
 			currentResources.remove(encodedResource);
 			// 如果currentResources也为空，说明当前已经没有任何资源正在进行加载了，故对该ThreadLocal变量进行移除
