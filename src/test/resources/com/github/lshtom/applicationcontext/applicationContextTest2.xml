@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	   xmlns:aop="http://www.springframework.org/schema/aop"
+	   xsi:schemaLocation="
+        http://www.springframework.org/schema/beans https://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/aop https://www.springframework.org/schema/aop/spring-aop.xsd">
+
+	<!--支持AOP注解，开启AOP功能-->
+	<!--Tips：aop标签属于自定义标签，之前在分析自定义标签的时候提到：-->
+	<!--对于自定义标签的解析，需要注册一个相应的NamespaceHandler，-->
+	<!--并且在相应的类路径下的META-INF文件夹下的spring.handlers文件中按照标签域名-NamespaceHandler类全路径名的格式进行声明。-->
+	<aop:aspectj-autoproxy />
+
+	<bean id="testBean" class="com.github.lshtom.applicationcontext.aop.TestBean"/>
+	<bean class="com.github.lshtom.applicationcontext.aop.AspectJTest"/>
+
+	<bean id="testBean2" class="com.github.lshtom.applicationcontext.aop.TestBean2"/>
+	<bean id="testBean3" class="com.github.lshtom.applicationcontext.aop.TestBean3"/>
+	<bean id="testBean4" class="com.github.lshtom.applicationcontext.aop.TestBean4"/>
+</beans>
