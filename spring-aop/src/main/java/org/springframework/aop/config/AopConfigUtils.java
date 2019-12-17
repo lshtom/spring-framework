@@ -16,9 +16,6 @@
 
 package org.springframework.aop.config;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator;
 import org.springframework.aop.aspectj.autoproxy.AspectJAwareAdvisorAutoProxyCreator;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
@@ -28,6 +25,9 @@ import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.core.Ordered;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class for handling registration of AOP auto-proxy creators.
@@ -96,7 +96,8 @@ public abstract class AopConfigUtils {
 	@Nullable
 	public static BeanDefinition registerAspectJAnnotationAutoProxyCreatorIfNecessary(
 			BeanDefinitionRegistry registry, @Nullable Object source) {
-
+		// 注册或升级AnnotationAwareAspectJAutoProxyCreator
+		// 即：如果当前容器中尚未有相应的Bean定义信息，则进行注册，否则考虑是否进行升级
 		return registerOrEscalateApcAsRequired(AnnotationAwareAspectJAutoProxyCreator.class, registry, source);
 	}
 
@@ -120,8 +121,11 @@ public abstract class AopConfigUtils {
 
 		Assert.notNull(registry, "BeanDefinitionRegistry must not be null");
 
+		// 【步骤1】：判断容器中是否已经了自动代理创建器（AnnotationAwareAspectJAutoProxyCreator），
+		// 若存在则且与现在的不一致，则需要根据优先级来判断到底该使用哪个。
 		if (registry.containsBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME)) {
 			BeanDefinition apcDefinition = registry.getBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME);
+			// 不一致则进行判断处理，根据优先级来决定使用哪个
 			if (!cls.getName().equals(apcDefinition.getBeanClassName())) {
 				int currentPriority = findPriorityForClass(apcDefinition.getBeanClassName());
 				int requiredPriority = findPriorityForClass(cls);
@@ -129,11 +133,15 @@ public abstract class AopConfigUtils {
 					apcDefinition.setBeanClassName(cls.getName());
 				}
 			}
+			// 如果已经存在了自动代理创建器（AnnotationAwareAspectJAutoProxyCreator）并且与将要创建的一致，
+			// 那么无需再次创建。
 			return null;
 		}
 
+		// 【步骤2】：注册自动代理创建器（AnnotationAwareAspectJAutoProxyCreator）的BeanDefinition
 		RootBeanDefinition beanDefinition = new RootBeanDefinition(cls);
 		beanDefinition.setSource(source);
+		// 为该BeanDefinition增加order属性，并且设置优先级为最高优先级，即意味着该BeanDefinition的高优先级
 		beanDefinition.getPropertyValues().add("order", Ordered.HIGHEST_PRECEDENCE);
 		beanDefinition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
 		registry.registerBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME, beanDefinition);

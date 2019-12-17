@@ -16,23 +16,18 @@
 
 package org.springframework.aop.framework;
 
+import org.aopalliance.intercept.Interceptor;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.springframework.aop.*;
+import org.springframework.aop.framework.adapter.AdvisorAdapterRegistry;
+import org.springframework.aop.framework.adapter.GlobalAdvisorAdapterRegistry;
+import org.springframework.lang.Nullable;
+
 import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
-import org.aopalliance.intercept.Interceptor;
-import org.aopalliance.intercept.MethodInterceptor;
-
-import org.springframework.aop.Advisor;
-import org.springframework.aop.IntroductionAdvisor;
-import org.springframework.aop.IntroductionAwareMethodMatcher;
-import org.springframework.aop.MethodMatcher;
-import org.springframework.aop.PointcutAdvisor;
-import org.springframework.aop.framework.adapter.AdvisorAdapterRegistry;
-import org.springframework.aop.framework.adapter.GlobalAdvisorAdapterRegistry;
-import org.springframework.lang.Nullable;
 
 /**
  * A simple but definitive way of working out an advice chain for a Method,
@@ -50,6 +45,12 @@ public class DefaultAdvisorChainFactory implements AdvisorChainFactory, Serializ
 	@Override
 	public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
 			Advised config, Method method, @Nullable Class<?> targetClass) {
+		// 说明：虽然之前在寻找合适的增强时（AopUtils.findAdvisorsThatCanApply）通过canApply方法去检测目标类中是否有与切点相匹配的方法，
+		// 但是当时在获取合适的增强的这一步骤中尚不知道将来要调用的是具体的哪个方法，且也不知道接下来要使用JDK动态代理还是CGLib代理，
+		// 因此，Spring在获取增强的那一步中是无法确定接下来用户所实际调用的方法有没有与之相匹配的增强的，
+		// 故此处的逻辑就是：遍历目前所获得的增强，并根据增强的切点信息去与当前方法做匹配检测，
+		// 若匹配则加入到拦截链列表interceptorList中(如果当前Advice不是MethodInterceptor，比如MethodBeforeAdvice就没有实现MethodInterceptor接口，那么会进行下包装)，
+		// 并最终返回！
 
 		// This is somewhat tricky... We have to process introductions first,
 		// but we need to preserve order in the ultimate list.
@@ -76,6 +77,8 @@ public class DefaultAdvisorChainFactory implements AdvisorChainFactory, Serializ
 						match = mm.matches(method, actualClass);
 					}
 					if (match) {
+						// getInterceptors方法中的重要逻辑是判断Advisor中的Advice是否实现了MethodInterceptor接口，
+						// 若实现了则返回，否则会尝试进行包装，并返回包装后的对象实例（拦截器），若包装失败则抛出异常！
 						MethodInterceptor[] interceptors = registry.getInterceptors(advisor);
 						if (mm.isRuntime()) {
 							// Creating a new object instance in the getInterceptors() method

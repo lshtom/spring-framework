@@ -16,6 +16,14 @@
 
 package org.springframework.aop.support;
 
+import org.springframework.aop.*;
+import org.springframework.core.BridgeMethodResolver;
+import org.springframework.core.MethodIntrospector;
+import org.springframework.lang.Nullable;
+import org.springframework.util.Assert;
+import org.springframework.util.ClassUtils;
+import org.springframework.util.ReflectionUtils;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -24,22 +32,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
-import org.springframework.aop.Advisor;
-import org.springframework.aop.AopInvocationException;
-import org.springframework.aop.IntroductionAdvisor;
-import org.springframework.aop.IntroductionAwareMethodMatcher;
-import org.springframework.aop.MethodMatcher;
-import org.springframework.aop.Pointcut;
-import org.springframework.aop.PointcutAdvisor;
-import org.springframework.aop.SpringProxy;
-import org.springframework.aop.TargetClassAware;
-import org.springframework.core.BridgeMethodResolver;
-import org.springframework.core.MethodIntrospector;
-import org.springframework.lang.Nullable;
-import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.ReflectionUtils;
 
 /**
  * Utility methods for AOP support code.
@@ -221,6 +213,12 @@ public abstract class AopUtils {
 	 * @return whether the pointcut can apply on any method
 	 */
 	public static boolean canApply(Pointcut pc, Class<?> targetClass, boolean hasIntroductions) {
+		// 说明：这个方法表明上看上去有点小复杂，其实本质逻辑非常简单：
+		// 就是通过候选增强的切点来判断其能否与目标类中的某个方法相匹配（如果是引介增强则是和类做匹配），
+		// 如果能找到匹配的，则表明该候选增强可用于该目标Bean类，故返回true。
+		// Tips:最里层的匹配逻辑其实是直接用了org.aspectj.weaver.tools包的方法，我们不需要过多的关注，
+		// 只需要明白这canApply方法的逻辑即可。
+
 		Assert.notNull(pc, "Pointcut must not be null");
 		if (!pc.getClassFilter().matches(targetClass)) {
 			return false;
@@ -239,10 +237,14 @@ public abstract class AopUtils {
 
 		Set<Class<?>> classes = new LinkedHashSet<>();
 		if (!Proxy.isProxyClass(targetClass)) {
+			// Tips：ClassUtils.getUserClass方法的作用是：返回用户给定的类型（其实就是直接将入参的类型返回），
+			// 但是里面该方法中有个重要的逻辑是判断下其是否为CGLib生成的类(通过类名中是否含有$$来判断)，
+			// 如果是CGLib生成的代理类则返回其原始的超类。
 			classes.add(ClassUtils.getUserClass(targetClass));
 		}
 		classes.addAll(ClassUtils.getAllInterfacesForClassAsSet(targetClass));
 
+		// ！！真正的判断是否适配的逻辑在此
 		for (Class<?> clazz : classes) {
 			Method[] methods = ReflectionUtils.getAllDeclaredMethods(clazz);
 			for (Method method : methods) {
@@ -283,6 +285,7 @@ public abstract class AopUtils {
 		if (advisor instanceof IntroductionAdvisor) {
 			return ((IntroductionAdvisor) advisor).getClassFilter().matches(targetClass);
 		}
+		// Tips：普通增强的增强器实例都是PointcutAdvisor类型的
 		else if (advisor instanceof PointcutAdvisor) {
 			PointcutAdvisor pca = (PointcutAdvisor) advisor;
 			return canApply(pca.getPointcut(), targetClass, hasIntroductions);
@@ -306,18 +309,22 @@ public abstract class AopUtils {
 			return candidateAdvisors;
 		}
 		List<Advisor> eligibleAdvisors = new ArrayList<>();
+		// 【步骤1】：首先处理引介增强
 		for (Advisor candidate : candidateAdvisors) {
 			if (candidate instanceof IntroductionAdvisor && canApply(candidate, clazz)) {
 				eligibleAdvisors.add(candidate);
 			}
 		}
 		boolean hasIntroductions = !eligibleAdvisors.isEmpty();
+		// 【步骤2】：非引介增强（普通增强？）的处理:逐一判断每个候选的增强是否可以应用到当前的Bean类上
 		for (Advisor candidate : candidateAdvisors) {
 			if (candidate instanceof IntroductionAdvisor) {
 				// already processed
+				// 由于上面已经处理过引介增强了，所以此处直接跳过
 				continue;
 			}
-			if (canApply(candidate, clazz, hasIntroductions)) {
+			// 对于普通增强的处理
+			if (canApply(candidate,clazz, hasIntroductions)) {
 				eligibleAdvisors.add(candidate);
 			}
 		}

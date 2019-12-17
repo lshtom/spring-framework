@@ -16,19 +16,18 @@
 
 package org.springframework.aop.aspectj.annotation;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.aspectj.lang.reflect.PerClauseKind;
-
 import org.springframework.aop.Advisor;
 import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Helper for retrieving @AspectJ beans from a BeanFactory and building
@@ -81,8 +80,10 @@ public class BeanFactoryAspectJAdvisorsBuilder {
 	 * @see #isEligibleBean
 	 */
 	public List<Advisor> buildAspectJAdvisors() {
+		// aspectBeanNames实例变量中缓存了使用AspectJ注解声明的Bean类的Bean名称
 		List<String> aspectNames = this.aspectBeanNames;
 
+		// 【步骤1】：若无缓存，则直接遍历容器中的Bean，并逐一解析，然后缓存
 		if (aspectNames == null) {
 			synchronized (this) {
 				aspectNames = this.aspectBeanNames;
@@ -92,6 +93,14 @@ public class BeanFactoryAspectJAdvisorsBuilder {
 					String[] beanNames = BeanFactoryUtils.beanNamesForTypeIncludingAncestors(
 							this.beanFactory, Object.class, true, false);
 					for (String beanName : beanNames) {
+						// isEligibleBean方法用于判断该Bean是否是合适的Bean，
+						// 如果返回false，则表示该Bean不是合适的Bean，则直接跳过不会再检测该Bean上是否有@AspectJ注解。
+						// Tips：isEligibleBean是在当前类中定义的一个protected方法，默认返回false,
+						// 子类可通过覆写该方法来在里面实现一些规则判断逻辑，【模板方法模式】
+						// 这样子的话，使用者就可以通过配置规则来决定不对某些类进行AspectJ注解检测，从而不被AOP代理增强。
+						// 当前类的子类AnnotationAwareAspectJAutoProxyCreator覆写类该方法，
+						// 并加入可通过正则表达式来决定当前Bean是否为AspectJ Bean的逻辑，
+						// 然后用户可利用该类的setIncludePatterns方法来添加上相应的正则表达式。
 						if (!isEligibleBean(beanName)) {
 							continue;
 						}
@@ -101,12 +110,21 @@ public class BeanFactoryAspectJAdvisorsBuilder {
 						if (beanType == null) {
 							continue;
 						}
+						// 判断当前Bean的类型是否为AspectJ切面（标注上@AspectJ注解的Bean类），
+						// 如果是切面类，则接下来要获取该类中所定义的增强。
+						// !Tips：此处所谓的单前Bean，指的是当前的for循环正在遍历的Bean！
 						if (this.advisorFactory.isAspect(beanType)) {
 							aspectNames.add(beanName);
+							// 对该AspectJ切面类进行下封装，封装成一个Aspect元数据类
 							AspectMetadata amd = new AspectMetadata(beanType, beanName);
+							// 判断该切面的实例化模型是否为单例
 							if (amd.getAjType().getPerClause().getKind() == PerClauseKind.SINGLETON) {
+								// 注意，该factory实例中封装了beanFactory实例，
+								// 并且在BeanFactoryAspectInstanceFactory的构造器中会通过所传入的beanFactory实例根据beanName来获取该切面Bean类的相关信息，
+								// 并封装出AspectMetadata类型（在内部），之后在advisorFactory.getAdvisors中会用到。
 								MetadataAwareAspectInstanceFactory factory =
 										new BeanFactoryAspectInstanceFactory(this.beanFactory, beanName);
+								// 获取增强，如果该切面Bean为单例Bean的话那么还会对增强进行缓存！
 								List<Advisor> classAdvisors = this.advisorFactory.getAdvisors(factory);
 								if (this.beanFactory.isSingleton(beanName)) {
 									this.advisorsCache.put(beanName, classAdvisors);
@@ -118,10 +136,12 @@ public class BeanFactoryAspectJAdvisorsBuilder {
 							}
 							else {
 								// Per target or per this.
+								// Bean是单例Bean，但其切面的实例化模型非单例则报错
 								if (this.beanFactory.isSingleton(beanName)) {
 									throw new IllegalArgumentException("Bean with name '" + beanName +
 											"' is a singleton, but aspect instantiation model is not singleton");
 								}
+								// 非单例，那么处理方式还是获取所有的增强，但是不会对其进行缓存，这也是与上面最大的区别！！！
 								MetadataAwareAspectInstanceFactory factory =
 										new PrototypeAspectInstanceFactory(this.beanFactory, beanName);
 								this.aspectFactoryCache.put(beanName, factory);
@@ -135,15 +155,21 @@ public class BeanFactoryAspectJAdvisorsBuilder {
 			}
 		}
 
+		// 【步骤2】：有缓存，但缓存的内容为空，则直接返回
 		if (aspectNames.isEmpty()) {
 			return Collections.emptyList();
 		}
+
+		// 【步骤3】：有缓存，且缓存的内容非空，则直接从缓存中获取返回
 		List<Advisor> advisors = new ArrayList<>();
 		for (String aspectName : aspectNames) {
 			List<Advisor> cachedAdvisors = this.advisorsCache.get(aspectName);
+			// 在获取所缓存的增强的时候，又有两种情况：
+			// 情况1：该切面的实例模型为单例且该Bean为单例，则直接获取所缓存的增强并返回
 			if (cachedAdvisors != null) {
 				advisors.addAll(cachedAdvisors);
 			}
+			// 情况2：非单例，故只缓存了工厂，故先获取工厂，再从工厂中获取增强
 			else {
 				MetadataAwareAspectInstanceFactory factory = this.aspectFactoryCache.get(aspectName);
 				advisors.addAll(this.advisorFactory.getAdvisors(factory));

@@ -73,19 +73,29 @@ public abstract class AopNamespaceUtils {
 
 	public static void registerAspectJAnnotationAutoProxyCreatorIfNecessary(
 			ParserContext parserContext, Element sourceElement) {
+		// Tips：此处的入参sourceElement即为"aop:aspectj-autoproxy"节点值
 
+		// 【步骤1】：注册beanName（id）为org.springframework.aop.config.internalAutoProxyCreator的BeanDefinition
 		BeanDefinition beanDefinition = AopConfigUtils.registerAspectJAnnotationAutoProxyCreatorIfNecessary(
 				parserContext.getRegistry(), parserContext.extractSource(sourceElement));
+		// 【步骤2】：对proxy-target-class以及expose-proxy属性进行处理
 		useClassProxyingIfNecessary(parserContext.getRegistry(), sourceElement);
+		// 【步骤3】：注册组件并通知(Fire an component-registered event)，便于监听器进一步处理
 		registerComponentIfNecessary(beanDefinition, parserContext);
 	}
 
 	private static void useClassProxyingIfNecessary(BeanDefinitionRegistry registry, @Nullable Element sourceElement) {
 		if (sourceElement != null) {
+			// 对proxy-target-class属性进行处理
+			// Tips：SpringAOP中支持使用的动态代理有两种：JDK动态代理和CGLib动态代理，
+			// Spring会自动选择，但如果要强制使用CGLib动态代理，则需要将该proxy-target-class属性设置为true（默认是false）
 			boolean proxyTargetClass = Boolean.parseBoolean(sourceElement.getAttribute(PROXY_TARGET_CLASS_ATTRIBUTE));
 			if (proxyTargetClass) {
 				AopConfigUtils.forceAutoProxyCreatorToUseClassProxying(registry);
 			}
+			// 对expose-proxy属性进行处理
+			// Tips：这个expose-proxy属性设置为true的作用是解决同一个类下在a方法调用b方法时没有触发执行b方法的增强方法的问题
+			// 详见《Spring源码深度解析（第2版）的P181》
 			boolean exposeProxy = Boolean.parseBoolean(sourceElement.getAttribute(EXPOSE_PROXY_ATTRIBUTE));
 			if (exposeProxy) {
 				AopConfigUtils.forceAutoProxyCreatorToExposeProxy(registry);

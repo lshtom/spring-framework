@@ -16,20 +16,19 @@
 
 package org.springframework.aop.aspectj.annotation;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.Serializable;
-
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.AjType;
 import org.aspectj.lang.reflect.AjTypeSystem;
 import org.aspectj.lang.reflect.PerClauseKind;
-
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.aspectj.AspectJExpressionPointcut;
 import org.springframework.aop.aspectj.TypePatternClassFilter;
 import org.springframework.aop.framework.AopConfigException;
 import org.springframework.aop.support.ComposablePointcut;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
 
 /**
  * Metadata for an AspectJ aspect class, with an additional Spring AOP pointcut
@@ -84,6 +83,11 @@ public class AspectMetadata implements Serializable {
 		Class<?> currClass = aspectClass;
 		AjType<?> ajType = null;
 		while (currClass != Object.class) {
+			// 返回给定Java类型的AspectJ运行时类型表示
+			// Tips：这个所谓的AjType其实包含了更多的关于Advice、Poincut等信息，
+			// 该getAjType方法其内部是对当前的类型做了包装，然后当调用AjType的相关方法（比如getPointcut）时将利用反射获取相应的信息,
+			// 因为反射本身太耗费性能了，所以这里采用了一种懒惰处理的方式，只有当调用到具体方法时才会去进行反射处理,
+			// 所以这也给了我们一种启示：对于耗费性能且非热点方法，那么可以采用懒惰处理（懒加载）的方式！
 			AjType<?> ajTypeToCheck = AjTypeSystem.getAjType(currClass);
 			if (ajTypeToCheck.isAspect()) {
 				ajType = ajTypeToCheck;

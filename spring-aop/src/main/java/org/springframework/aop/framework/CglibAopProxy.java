@@ -16,45 +16,28 @@
 
 package org.springframework.aop.framework;
 
-import java.io.Serializable;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.UndeclaredThrowableException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.WeakHashMap;
-
 import org.aopalliance.aop.Advice;
 import org.aopalliance.intercept.MethodInvocation;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-import org.springframework.aop.Advisor;
-import org.springframework.aop.AopInvocationException;
-import org.springframework.aop.PointcutAdvisor;
-import org.springframework.aop.RawTargetAccess;
-import org.springframework.aop.TargetSource;
+import org.springframework.aop.*;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.cglib.core.ClassGenerator;
 import org.springframework.cglib.core.CodeGenerationException;
 import org.springframework.cglib.core.SpringNamingPolicy;
-import org.springframework.cglib.proxy.Callback;
-import org.springframework.cglib.proxy.CallbackFilter;
-import org.springframework.cglib.proxy.Dispatcher;
-import org.springframework.cglib.proxy.Enhancer;
-import org.springframework.cglib.proxy.Factory;
-import org.springframework.cglib.proxy.MethodInterceptor;
-import org.springframework.cglib.proxy.MethodProxy;
-import org.springframework.cglib.proxy.NoOp;
+import org.springframework.cglib.proxy.*;
 import org.springframework.cglib.transform.impl.UndeclaredThrowableStrategy;
 import org.springframework.core.SmartClassLoader;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ObjectUtils;
+
+import java.io.Serializable;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.util.*;
 
 /**
  * CGLIB-based {@link AopProxy} implementation for the Spring AOP framework.
@@ -165,6 +148,7 @@ class CglibAopProxy implements AopProxy, Serializable {
 			Class<?> rootClass = this.advised.getTargetClass();
 			Assert.state(rootClass != null, "Target class must be available for creating a CGLIB proxy");
 
+			// 【步骤1】：获取要使用CGLib所生成的代理对象的超类，其实就是目标类
 			Class<?> proxySuperClass = rootClass;
 			if (ClassUtils.isCglibProxyClass(rootClass)) {
 				proxySuperClass = rootClass.getSuperclass();
@@ -175,9 +159,11 @@ class CglibAopProxy implements AopProxy, Serializable {
 			}
 
 			// Validate the class, writing log messages as necessary.
+			// 【步骤2】：验证超类（目标类）的类型
 			validateClassIfNecessary(proxySuperClass, classLoader);
 
 			// Configure CGLIB Enhancer...
+			// 【步骤3】：创建及配置Enhancer
 			Enhancer enhancer = createEnhancer();
 			if (classLoader != null) {
 				enhancer.setClassLoader(classLoader);
@@ -191,6 +177,7 @@ class CglibAopProxy implements AopProxy, Serializable {
 			enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
 			enhancer.setStrategy(new ClassLoaderAwareUndeclaredThrowableStrategy(classLoader));
 
+			// 【步骤4】：设置拦截器
 			Callback[] callbacks = getCallbacks(rootClass);
 			Class<?>[] types = new Class<?>[callbacks.length];
 			for (int x = 0; x < types.length; x++) {
@@ -199,9 +186,14 @@ class CglibAopProxy implements AopProxy, Serializable {
 			// fixedInterceptorMap only populated at this point, after getCallbacks call above
 			enhancer.setCallbackFilter(new ProxyCallbackFilter(
 					this.advised.getConfigurationOnlyCopy(), this.fixedInterceptorMap, this.fixedInterceptorOffset));
+			// !将Callback的类型赋值给enhancer，这样当调用到所代理的方法时就会激活相应的CallBack实现类，
+			// 也就是会最终回调DynamicAdvisedInterceptor的intercept方法，
+			// 从而会最终执行相应增强（拦截器），
+			// 这与使用JDK动态代理时由代理对象来回调所实现的InvocationHandler接口的invoke方法是类似的！
 			enhancer.setCallbackTypes(types);
 
 			// Generate the proxy class and create a proxy instance.
+			// 【步骤5】：生成代理类以及创建代理
 			return createProxyClassAndInstance(enhancer, callbacks);
 		}
 		catch (CodeGenerationException | IllegalArgumentException ex) {
@@ -285,6 +277,14 @@ class CglibAopProxy implements AopProxy, Serializable {
 		boolean isStatic = this.advised.getTargetSource().isStatic();
 
 		// Choose an "aop" interceptor (used for AOP calls).
+		// ！！关键逻辑在DynamicAdvisedInterceptor中，
+		// DynamicAdvisedInterceptor类中实现了MethodInterceptor接口的intercept方法，
+		// 在这个intercept方法中封装了拦截器链并调用执行拦截器链，
+		// 这也正是为何需要将advised实例变量作为构造器参数传入的原因，
+		// 因为只有通过advised实例变量才可以拿到相应的增强（拦截器或包装成拦截器）信息。
+		// 其实DynamicAdvisedInterceptor类中所实现的intercept方法中所做的逻辑类似于JdkDynamicAopProxy类中所实现的InvocationHandler接口的invoke方法中做的逻辑（使用JDK动态代理必须实现该接口），
+		// 并且此处所创建的DynamicAdvisedInterceptor实例会以Callback的形式返回到上一层，并在上层中会取其类型赋值给Enhancer，
+		// 最终当Enhancer所生成的代理类中的代理方法被调用时，将会回调到DynamicAdvisedInterceptor类所实现的intercept方法！！！
 		Callback aopInterceptor = new DynamicAdvisedInterceptor(this.advised);
 
 		// Choose a "straight to target" interceptor. (used for calls that are
@@ -665,6 +665,7 @@ class CglibAopProxy implements AopProxy, Serializable {
 			try {
 				if (this.advised.exposeProxy) {
 					// Make invocation available if necessary.
+					// 暴露代理对象实例
 					oldProxy = AopContext.setCurrentProxy(proxy);
 					setProxyContext = true;
 				}
@@ -685,6 +686,8 @@ class CglibAopProxy implements AopProxy, Serializable {
 				}
 				else {
 					// We need to create a method invocation...
+					// ！！核心逻辑在此：将拦截器链封装成CglibMethodInvocation对象并调用其proceed方法，执行拦截器链
+					// Tips：这个CglibMethodInvocation继承自ReflectiveMethodInvocation
 					retVal = new CglibMethodInvocation(proxy, target, method, args, targetClass, chain, methodProxy).proceed();
 				}
 				retVal = processReturnType(proxy, target, method, retVal);

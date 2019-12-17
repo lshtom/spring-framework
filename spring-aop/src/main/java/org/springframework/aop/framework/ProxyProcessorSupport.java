@@ -16,8 +16,6 @@
 
 package org.springframework.aop.framework;
 
-import java.io.Closeable;
-
 import org.springframework.beans.factory.Aware;
 import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.beans.factory.DisposableBean;
@@ -26,6 +24,8 @@ import org.springframework.core.Ordered;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ObjectUtils;
+
+import java.io.Closeable;
 
 /**
  * Base class with common functionality for proxy processors, in particular
@@ -102,15 +102,22 @@ public class ProxyProcessorSupport extends ProxyConfig implements Ordered, BeanC
 	 * @param proxyFactory the ProxyFactory for the bean
 	 */
 	protected void evaluateProxyInterfaces(Class<?> beanClass, ProxyFactory proxyFactory) {
+		// 【步骤1】：先获取目标类所实现的所有接口
 		Class<?>[] targetInterfaces = ClassUtils.getAllInterfacesForClass(beanClass, getProxyClassLoader());
+		// 标志变量hasReasonableProxyInterface：是否由合理的代理接口（意思是可根据此接口来生成代理）
 		boolean hasReasonableProxyInterface = false;
+		// 【步骤2】：依次遍历所有的接口，判断是否有适合用于生成代理的接口
 		for (Class<?> ifc : targetInterfaces) {
+			// isConfigurationCallbackInterface方法用于判断是否为容器回调类接口（如InitializingBean、Aware、Closeable等）
+			// isInternalLanguageInterface方法用于判断是否为内部语言接口（如groovy.lang.GroovyObject、.cglib.proxy.Factory等）
 			if (!isConfigurationCallbackInterface(ifc) && !isInternalLanguageInterface(ifc) &&
 					ifc.getMethods().length > 0) {
 				hasReasonableProxyInterface = true;
 				break;
 			}
 		}
+		// 【步骤3】：如果找到适合生成代理的接口，那么将目标类所实现的所有的接口到加入（毕竟生成的代理类也是要实现目标类的所有接口的），
+		// 如果没有找到合适的接口，则设置为基于类进行代理
 		if (hasReasonableProxyInterface) {
 			// Must allow for introductions; can't just set interfaces to the target's interfaces only.
 			for (Class<?> ifc : targetInterfaces) {
@@ -120,6 +127,13 @@ public class ProxyProcessorSupport extends ProxyConfig implements Ordered, BeanC
 		else {
 			proxyFactory.setProxyTargetClass(true);
 		}
+
+		// Tips：通过分析这个evaluateProxyInterfaces方法时，可以明白：
+		// 在开启了AOP的功能后，如果当前类中的某个方法被某个切面类的切点所命中，并且有相适配的增强，
+		// 那么Spring会为当前类生成代理，如果恰好当前类有实现了某个有效接口（非容器回调接口、语言内置接口等）,
+		// Spring会选择采用JDK代理，根据接口来生成代理类，
+		// 但是如果这个被切点所命中的方法并不是在接口中的话，那就会有问题了，所生成的代理类时不会含有这个方法的！！！
+		// 解决方式就是强制使用CGLib代理。
 	}
 
 	/**

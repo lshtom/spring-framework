@@ -16,19 +16,18 @@
 
 package org.springframework.aop.framework;
 
+import org.aopalliance.intercept.MethodInterceptor;
+import org.aopalliance.intercept.MethodInvocation;
+import org.springframework.aop.ProxyMethodInvocation;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.core.BridgeMethodResolver;
+import org.springframework.lang.Nullable;
+
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import org.aopalliance.intercept.MethodInterceptor;
-import org.aopalliance.intercept.MethodInvocation;
-
-import org.springframework.aop.ProxyMethodInvocation;
-import org.springframework.aop.support.AopUtils;
-import org.springframework.core.BridgeMethodResolver;
-import org.springframework.lang.Nullable;
 
 /**
  * Spring's implementation of the AOP Alliance
@@ -158,31 +157,63 @@ public class ReflectiveMethodInvocation implements ProxyMethodInvocation, Clonea
 	@Override
 	@Nullable
 	public Object proceed() throws Throwable {
+		// Tips:【职责链模式】：
+		// ReflectiveMethodInvocation类扮演了Client角色（请求者）：发起对Handler的调用
+		// MethodInterceptor类扮演了Handler角色（处理者）：定义了处理的接口（即invoke方法）
+		// MethodBeforeAdviceInterceptor、AspectJAroundAdvice等扮演了ConcreteHandler角色（具体处理者）：实现了处理接口（实现了invoke方法）
+		// 为什么要采用职责链模式呢？
+		// 因为拦截器链中可能有不同的拦截器，当不同的拦截器组合在一起时，可能需要动态的调整执行顺序，
+		// 比如对于方法A，拦截器链中的拦截器有afterA、aroundA，执行顺序是：aroundA->A->aroundA->afterA
+		// 而对于方法B，拦截器链中的拦截器有beforeA、aroundA，执行顺序是：aroundA->beforeA->A->aroundA
+		// 如果是在外部逐个调用这些拦截器的话，那就必须根据拦截器链中所含有的拦截器写大量的控制判断逻辑来进行判断选择所要调用的下一个拦截器,
+		// 当要增加一个全新的拦截器类型时，那可能就要对这判断控制逻辑进行大量修改了，完全不具备可维护性和扩展性，
+		// 因此，采用职责链模式，将控制逻辑分散到具体的Handler中（也就是具体的拦截器中），
+		// 比如对于AspectJAfterAdvice类型的拦截器，其是如何确保after的逻辑是在最后执行的呢？
+		// 就是利用 try{调用拦截器链上的下一个拦截器} finally {after的逻辑} 这样的写法就实现了顺序的控制，
+		// 如果是写在外部来调用的话，免不了一番的排序操作等。
+		// so,需要使用职责链模式的场景就是：当需要动态的决定各个ConcreteHandler之间的执行顺序时，即对于某次请求由谁来处理这个问题，希望动态的改变问题的处理者！
+
 		//	We start with an index of -1 and increment early.
+		// interceptorsAndDynamicMethodMatchers.size()为拦截器链中拦截器的个数
 		if (this.currentInterceptorIndex == this.interceptorsAndDynamicMethodMatchers.size() - 1) {
+			// 执行完所有的增强后将执行切点方法（准备的说是原始的目标方法）
 			return invokeJoinpoint();
 		}
 
+		// 获取下一个要执行的拦截器
 		Object interceptorOrInterceptionAdvice =
 				this.interceptorsAndDynamicMethodMatchers.get(++this.currentInterceptorIndex);
 		if (interceptorOrInterceptionAdvice instanceof InterceptorAndDynamicMethodMatcher) {
 			// Evaluate dynamic method matcher here: static part will already have
 			// been evaluated and found to match.
+			// 动态匹配
 			InterceptorAndDynamicMethodMatcher dm =
 					(InterceptorAndDynamicMethodMatcher) interceptorOrInterceptionAdvice;
 			Class<?> targetClass = (this.targetClass != null ? this.targetClass : this.method.getDeclaringClass());
+			// 动态匹配成功则执行，否则跳过
 			if (dm.methodMatcher.matches(this.method, targetClass, this.arguments)) {
 				return dm.interceptor.invoke(this);
 			}
 			else {
 				// Dynamic matching failed.
 				// Skip this interceptor and invoke the next in the chain.
+				// 递归调用当前的proceed方法，相当于是跳过当前拦截器的执行
 				return proceed();
 			}
 		}
 		else {
+			// 非动态匹配拦截器，即普通拦截器，比如：
+			/**
+			 * ExposeInvocationInterceptor
+			 * DelegatePerTargetObjectIntroductionInterceptor
+			 * MethodBeforeAdviceInterceptor
+			 * AspectJAroundAdvice
+			 * AspectJAfterAdvice
+			 * ......
+			 */
 			// It's an interceptor, so we just invoke it: The pointcut will have
 			// been evaluated statically before this object was constructed.
+			// 将this作为参数传入以保证当前实例中调用链的执行
 			return ((MethodInterceptor) interceptorOrInterceptionAdvice).invoke(this);
 		}
 	}

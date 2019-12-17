@@ -566,7 +566,15 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 			// getEarlyBeanReference方法的入参bean其实是前面已经进行了实例化的Bean对象实例，
 			// 而在getEarlyBeanReference方法中会回调SmartInstantiationAwareBeanPostProcessor类型的后置处理器的getEarlyBeanReference方法，
 			// 该后置处理器的方法提供了一个机会来让用户返回新实例（比如对传入的bean实例进行包装），
-			// AOP就是在此处将advice动态织入Bean中的
+			// AOP就是在此处将advice动态织入Bean中的?(准确的说来不全对！！！)
+
+			// Tips：切记，此处并非是回调getEarlyBeanReference方法，仅仅是在注册该beanName的ObjectFactory而已，
+			// 只不过在AspectJ注解自动代理创建器中（AnnotationAwareAspectJAutoProxyCreator）的父类AbstractAutoProxyCreator中
+			// 所实现的SmartInstantiationAwareBeanPostProcessor后置处理器的getEarlyBeanReference方法中实现了AOP代理包装而已，
+			// 但是，在通常情况下，真正进行AOP代理包装的是在AbstractAutoProxyCreator所实现的BeanPostProcessor接口的postProcessAfterInitialization方法中进行的,
+			// 所以，getEarlyBeanReference方法只是进行AOP代理包装的其中位置之一。
+			// 那为何在getEarlyBeanReference方法中也能进行AOP代理包装呢？而不是直接都在postProcessAfterInitialization方法中进行呢？
+			// 个人认为是：Spring考虑到循环依赖的情形下，当所需要获取的依赖Bean需要被AOP代理增强时，此时能确保其所获取到的早期引用也是被AOP代理包装过的！
 			addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
 			// 上面这段逻辑等同的匿名内部类的写法如下：
 			/**

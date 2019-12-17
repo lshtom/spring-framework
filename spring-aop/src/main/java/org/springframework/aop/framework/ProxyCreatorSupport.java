@@ -16,10 +16,10 @@
 
 package org.springframework.aop.framework;
 
+import org.springframework.util.Assert;
+
 import java.util.LinkedList;
 import java.util.List;
-
-import org.springframework.util.Assert;
 
 /**
  * Base class for proxy factories.
@@ -102,6 +102,16 @@ public class ProxyCreatorSupport extends AdvisedSupport {
 		if (!this.active) {
 			activate();
 		}
+		// 【工厂方法模式】：getAopProxyFactory方法中返回的其实是接口AopProxyFactory，
+		// 调用的也是AopProxyFactory接口的createAopProxy方法，
+		// 也就是说从获取AOP代理工厂，到创建AOP代理的这个过程中（也就是下面的代码），
+		// 对于调用方而言都无需接触到具体的实现类，完全和具体实现解耦。
+
+		// ！注意：createAopProxy方法的入参为this，指向当前类ProxyCreatorSupport，
+		// 而之前在AbstractAutoProxyCreator类中的createProxy方法中所创建的代理工厂ProxyFactory是当前类ProxyCreatorSupport的子类，
+		// 并且之前在给ProxyFactory实例设置相关参数/值（比如增强器Advisor）时，这些参数/值其实都是赋值给ProxyFactory的父类所持有，
+		// 故此处以this来作为参数传递，那么意味着持有此this引用的方法，将可以利用此this引用来获取到相应的全局代理参数设置（proxyTargetClass、optimize等）已经相应的增强器，
+		// 而这也正是创建代理的具体实现类JdkDynamicAopProxy、ObjenesisCglibAopProxy所需要的！！！
 		return getAopProxyFactory().createAopProxy(this);
 	}
 

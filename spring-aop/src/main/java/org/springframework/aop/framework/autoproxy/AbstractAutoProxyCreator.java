@@ -16,19 +16,9 @@
 
 package org.springframework.aop.framework.autoproxy;
 
-import java.lang.reflect.Constructor;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.aopalliance.aop.Advice;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.aop.Advisor;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.TargetSource;
@@ -49,6 +39,10 @@ import org.springframework.beans.factory.config.SmartInstantiationAwareBeanPostP
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
+
+import java.lang.reflect.Constructor;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@link org.springframework.beans.factory.config.BeanPostProcessor} implementation
@@ -204,6 +198,8 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 
 	@Override
 	public void setBeanFactory(BeanFactory beanFactory) {
+		// 在该抽象类AbstractAutoProxyCreator中实现了BeanFactoryAware接口，
+		// 并在该setBeanFactory方法中将传入的beanFactory实例给持有。
 		this.beanFactory = beanFactory;
 	}
 
@@ -248,6 +244,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 			if (this.advisedBeans.containsKey(cacheKey)) {
 				return null;
 			}
+			// Tips：下面的shouldSkip方法中调用了findCandidateAdvisors方法获取候选的增强器（Advisor）！！！
 			if (isInfrastructureClass(beanClass) || shouldSkip(beanClass, beanName)) {
 				this.advisedBeans.put(cacheKey, Boolean.FALSE);
 				return null;
@@ -295,6 +292,13 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
 		if (bean != null) {
 			Object cacheKey = getCacheKey(bean.getClass(), beanName);
+			// 判断是否需要代理包装，若需要则进行代理包装
+			// 此处将执行wrapIfNecessary方法的情形有两种：
+			// 1、当前Bean未曾被包装过（earlyProxyReferences中没有值，所以remove方法返回的是null）；（换个角度来说就是getEarlyBeanReference从未被调用过->意味着该Bean未曾有过循环依赖问题）
+			// 2、beanb被包装过，从earlyProxyReferences中能取到值，但与当前的bean实例不同，所以此处相当于丢弃之前的，然后重新包装。
+			// 通常情况下，是第一种情形，而对于第二种情形，应该是发生了循环依赖的情况，
+			// 也就是该类所实现的SmartInstantiationAwareBeanPostProcessor后置处理器的getEarlyBeanReference方法被调用过了。
+			// Tips:实例变量earlyProxyReferences中保存的bean实例未必都是包装过的，因为如果该Bean并不需要AOP增强的话，其实其缓存的就是个早期引用对象实例而已
 			if (this.earlyProxyReferences.remove(cacheKey) != bean) {
 				return wrapIfNecessary(bean, beanName, cacheKey);
 			}
@@ -315,6 +319,8 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	 * @return the cache key for the given class and name
 	 */
 	protected Object getCacheKey(Class<?> beanClass, @Nullable String beanName) {
+		// 如果有beanName，且该Bean不是FactoryBean，则直接返回beanName作为CacheKey，如果是FactoryBean则返回&beanName；
+		// 否则返回beanClass作为CacheKey。
 		if (StringUtils.hasLength(beanName)) {
 			return (FactoryBean.class.isAssignableFrom(beanClass) ?
 					BeanFactory.FACTORY_BEAN_PREFIX + beanName : beanName);
@@ -332,27 +338,35 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	 * @return a proxy wrapping the bean, or the raw bean instance as-is
 	 */
 	protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
+		// 情形一：不由Spring AOP来处理，而是采用自定义的方式处理
+		// Tips：被加入到targetSourcedBeans实例的逻辑：抑制不必要的目标bean的默认实例化:TargetSource将以自定义的方式处理目标实例。
 		if (StringUtils.hasLength(beanName) && this.targetSourcedBeans.contains(beanName)) {
 			return bean;
 		}
+		// 情形二：无需增强，则直接返回
+		// Tips：该Bean之前已经被判断过一次了，所以advisedBeans实例变量中有判断值
 		if (Boolean.FALSE.equals(this.advisedBeans.get(cacheKey))) {
 			return bean;
 		}
+		// 情形三：该Bean为基础设施类（比如Advice、Pointcut、Advisor等）或者为原始类（beanName(id)为类全限定名.ORIGINAL）则不代理，直接返回
 		if (isInfrastructureClass(bean.getClass()) || shouldSkip(bean.getClass(), beanName)) {
 			this.advisedBeans.put(cacheKey, Boolean.FALSE);
 			return bean;
 		}
-
+		// 情形四：如果存在针对该Bean的增强方法则进行代理,并返回代理后的Bean实例
 		// Create proxy if we have advice.
+		// 1）先获取适用于当前Bean的增强（即当前Bean能够某增强的切点所切中）
 		Object[] specificInterceptors = getAdvicesAndAdvisorsForBean(bean.getClass(), beanName, null);
 		if (specificInterceptors != DO_NOT_PROXY) {
 			this.advisedBeans.put(cacheKey, Boolean.TRUE);
+			// 2）创建代理
 			Object proxy = createProxy(
 					bean.getClass(), beanName, specificInterceptors, new SingletonTargetSource(bean));
 			this.proxyTypes.put(cacheKey, proxy.getClass());
 			return proxy;
 		}
 
+		// 执行到此处，表明当前Bean为普通Bean，且没有找到相应的增强方法
 		this.advisedBeans.put(cacheKey, Boolean.FALSE);
 		return bean;
 	}
@@ -446,28 +460,54 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 			AutoProxyUtils.exposeTargetClass((ConfigurableListableBeanFactory) this.beanFactory, beanName, beanClass);
 		}
 
+		// 【步骤1】：创建代理工厂（后面将会利用这个代理工厂来生成代理类实例）
 		ProxyFactory proxyFactory = new ProxyFactory();
+		// copyFrom方法中的操作主要是将一些全局的参数配置给赋值给该代理工厂（比如proxyTargetClass、optimize等）
+		// 注意：此处所谓的copyFrom并不是将整个this引用给持有，而仅仅是通过this引用获取那几个变量的值而已
 		proxyFactory.copyFrom(this);
 
+		// 【步骤2】：判断是采用JDK动态代理还是CGLib代理
+		// 判断是否直接代理目标类及任何接口，而不再进行进一步的评估判断（默认是false）
+		// Tips：如果<aop:aspectj-autoproxy />标签中将属性proxy-target-class设置为true的话，此处isProxyTargetClass返回为true，就达到强制使用CGLib的目的
 		if (!proxyFactory.isProxyTargetClass()) {
+			// 判断给定的bean是否应该使用其目标类而不是其接口进行代理，其判断结果会决定是使用JDK代理还是CGLib代理
 			if (shouldProxyTargetClass(beanClass, beanName)) {
+				// 设置为基于类来生成代理类（CGLib）
 				proxyFactory.setProxyTargetClass(true);
 			}
 			else {
+				// 评估可否基于接口生成代理（JDK代理），如果当前Bean类并没有实现相关接口，那么还是会设置为基于类来生成代理（CGLib）（即setProxyTargetClass(true)）
 				evaluateProxyInterfaces(beanClass, proxyFactory);
 			}
 		}
 
+		// 【步骤3】：得到所有的Advisor类型的增强
 		Advisor[] advisors = buildAdvisors(beanName, specificInterceptors);
 		proxyFactory.addAdvisors(advisors);
+		// 设置当前要代理的类（targetSource实例其实是对当前Bean实例的包装,如：new SingletonTargetSource(bean)）
 		proxyFactory.setTargetSource(targetSource);
+		// 扩展点：定制代理（留给子类覆写实现【模板方法模式】）
 		customizeProxyFactory(proxyFactory);
-
+		// 用来控制代理工厂被配置之后，是否还允许修改
+		// 默认值为false（即在代理被配置之后，不允许修改代理的配置）
 		proxyFactory.setFrozen(this.freezeProxy);
 		if (advisorsPreFiltered()) {
 			proxyFactory.setPreFiltered(true);
 		}
 
+		// Tips:分析到此处应该明白：Spring是通过所创建的代理工厂来完成后续的代理的创建【会用到工厂方法模式】，
+		// 而在前面的步骤中就是向该代理工厂设置各种参数，其中就包括targetSource（而这个targetSource又封装了当前正在处理的Bean实例）,
+		// 这也是为啥后续能利用该代理工厂为特定的Bean生成代理的原因！！！
+		// 当然，除了targetSource外，还在一开头将this指针（勘误：只是复制相关属性值而已）传给了代理工厂ProxyFactory，以及将增强赋值给代理工厂（addAdvisors方法）,
+		// 因此代理工厂中还获取到了相应的全局配置信息和切点、增强等。(切点信息是被包含在增强里的)
+		// 可以这么说：Spring搞这个代理工厂的目的就是将创建代理这复杂的操作给委托到代理工厂，这样子就可以和主干逻辑给解耦！
+
+		// Tips:从方法的最外层一直分析到此处，要明白留意一点：
+		// AbstractAutoProxyCreator类及其子类/父类从不会去持有Bean实例（包括Bean名称）（不过会缓存那些已经被代理处理过的Bean的名称，主要是为了判断方便），
+		// 不同层次的方法间的调用一直都是将Bean实例/Bean类型/Bean名称作为方法参数进行传递的，
+		// AbstractAutoProxyCreator类及其子类/父类中持有的只是配置参数（比如proxyTargetClass、optimize等）以及BeanFactory实例、xxx解析器实例、工厂实例等。
+
+		// 【步骤4】：获取代理
 		return proxyFactory.getProxy(getProxyClassLoader());
 	}
 
@@ -508,6 +548,9 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	 * @return the list of Advisors for the given bean
 	 */
 	protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] specificInterceptors) {
+		// Tips：该方法咋一看上去有点小复杂，其实并没有什么复杂的逻辑，
+		// 其本质是：确保所有的增强都被封装成了Advisor类型，如果还不是Advisor类型，会进行包装，如果无法包装，则抛出异常（wrap方法的逻辑）。
+
 		// Handle prototypes correctly...
 		Advisor[] commonInterceptors = resolveInterceptorNames();
 
@@ -532,6 +575,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 
 		Advisor[] advisors = new Advisor[allInterceptors.size()];
 		for (int i = 0; i < allInterceptors.size(); i++) {
+			// 核心逻辑在此wrap方法中
 			advisors[i] = this.advisorAdapterRegistry.wrap(allInterceptors.get(i));
 		}
 		return advisors;

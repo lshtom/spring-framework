@@ -16,15 +16,14 @@
 
 package org.springframework.aop.framework.adapter;
 
+import org.aopalliance.aop.Advice;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.aopalliance.aop.Advice;
-import org.aopalliance.intercept.MethodInterceptor;
-
-import org.springframework.aop.Advisor;
-import org.springframework.aop.support.DefaultPointcutAdvisor;
 
 /**
  * Default implementation of the {@link AdvisorAdapterRegistry} interface.
@@ -55,12 +54,17 @@ public class DefaultAdvisorAdapterRegistry implements AdvisorAdapterRegistry, Se
 
 	@Override
 	public Advisor wrap(Object adviceObject) throws UnknownAdviceTypeException {
+		// Tips:该方法的逻辑就是：将增强对象包装成Advisor对象，如果无法包装成则抛出异常！
+
+		// 情形一：当前增强对象已经是Advisor类型了，无需再包装，直接返回
 		if (adviceObject instanceof Advisor) {
 			return (Advisor) adviceObject;
 		}
+		// 情形二：不是Advisor，也不是Advice，直接抛出异常
 		if (!(adviceObject instanceof Advice)) {
 			throw new UnknownAdviceTypeException(adviceObject);
 		}
+		// 情形三：是Advice，则尝试能否包装成Advisor，若可以则包装好后返回，否则抛出异常
 		Advice advice = (Advice) adviceObject;
 		if (advice instanceof MethodInterceptor) {
 			// So well-known it doesn't even need an adapter.
@@ -84,6 +88,9 @@ public class DefaultAdvisorAdapterRegistry implements AdvisorAdapterRegistry, Se
 		}
 		for (AdvisorAdapter adapter : this.adapters) {
 			if (adapter.supportsAdvice(advice)) {
+				// 在具体的getInterceptor方法的实现中用到了【适配器模式】，
+				// 比如在MethodBeforeAdviceAdapter类所实现的getInterceptor方法中
+				// 用MethodBeforeAdviceInterceptor类对MethodBeforeAdvice类型的advice进行了包装，以适配成拦截器。
 				interceptors.add(adapter.getInterceptor(advisor));
 			}
 		}

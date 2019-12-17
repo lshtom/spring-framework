@@ -16,16 +16,16 @@
 
 package org.springframework.aop.aspectj.annotation;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
-
 import org.springframework.aop.Advisor;
 import org.springframework.aop.aspectj.autoproxy.AspectJAwareAdvisorAutoProxyCreator;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * {@link AspectJAwareAdvisorAutoProxyCreator} subclass that processes all AspectJ
@@ -81,6 +81,7 @@ public class AnnotationAwareAspectJAutoProxyCreator extends AspectJAwareAdvisorA
 		if (this.aspectJAdvisorFactory == null) {
 			this.aspectJAdvisorFactory = new ReflectiveAspectJAdvisorFactory(beanFactory);
 		}
+		// aspectJAdvisorsBuilder对象实例中封装了beanFactory实例
 		this.aspectJAdvisorsBuilder =
 				new BeanFactoryAspectJAdvisorsBuilderAdapter(beanFactory, this.aspectJAdvisorFactory);
 	}
@@ -89,9 +90,16 @@ public class AnnotationAwareAspectJAutoProxyCreator extends AspectJAwareAdvisorA
 	@Override
 	protected List<Advisor> findCandidateAdvisors() {
 		// Add all the Spring advisors found according to superclass rules.
+		// 【步骤1】：调用父类的findCandidateAdvisors方法获取在XML配置文件声明的增强
+		// Tips：尽管我们在使用AOP时一般都是直接使用AspectJ注解，但是Spring还是保留了对XML配置的支持
 		List<Advisor> advisors = super.findCandidateAdvisors();
 		// Build Advisors for all AspectJ aspects in the bean factory.
+		// 【步骤2】：获取由注解所声明的增强
 		if (this.aspectJAdvisorsBuilder != null) {
+			// Tips：在上面的initBeanFactory方法中构建了BeanFactoryAspectJAdvisorsBuilderAdapter对象，
+			// 封装了BeanFactory容器实例，并将构建好的对象赋值给了实例变量aspectJAdvisorsBuilder,
+			// 也正因此，在buildAspectJAdvisors方法中才可以利用BeanFactory容器实例从容器中获取所有注册到容器中的Bean的相关信息，
+			// 并找到声明了AspectJ注解的类。
 			advisors.addAll(this.aspectJAdvisorsBuilder.buildAspectJAdvisors());
 		}
 		return advisors;
