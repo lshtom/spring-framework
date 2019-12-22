@@ -16,10 +16,6 @@
 
 package org.springframework.jdbc.core;
 
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.dao.TypeMismatchDataAccessException;
@@ -28,6 +24,10 @@ import org.springframework.jdbc.support.JdbcUtils;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.NumberUtils;
+
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 
 /**
  * {@link RowMapper} implementation that converts a single column into a single
@@ -104,6 +104,8 @@ public class SingleColumnRowMapper<T> implements RowMapper<T> {
 	@Nullable
 	public T mapRow(ResultSet rs, int rowNum) throws SQLException {
 		// Validate column count.
+		// 验证返回结果数，如果返回的结果行数不是1列的话报错，
+		// 因为queryForObject方法只是获取的某一列值！(注意：是列！！)
 		ResultSetMetaData rsmd = rs.getMetaData();
 		int nrOfColumns = rsmd.getColumnCount();
 		if (nrOfColumns != 1) {
@@ -111,9 +113,15 @@ public class SingleColumnRowMapper<T> implements RowMapper<T> {
 		}
 
 		// Extract column value from JDBC ResultSet.
+		// 获取第一列的值（其实也只有这一列），并将值转换为相应的类型
 		Object result = getColumnValue(rs, 1, this.requiredType);
+		// 下面这个if中关键的是：!this.requiredType.isInstance(result)，
+		// 这个isInstance方法的作用是：判断当前的result的类型是否已经是requiredType的类型，
+		// 如果不是，则表明上面的getColumnValue方法中没能将值转换为相应的类型，故需要进一步转换，
+		// 也就是调用下面的convertValueToRequiredType方法！
 		if (result != null && this.requiredType != null && !this.requiredType.isInstance(result)) {
 			// Extracted value does not match already: try to convert it.
+			// 再尝试进行类型转换，如果还是无法转换，那就会抛出异常出来（IllegalArgumentException）！
 			try {
 				return (T) convertValueToRequiredType(result, this.requiredType);
 			}
@@ -197,16 +205,20 @@ public class SingleColumnRowMapper<T> implements RowMapper<T> {
 		else if (Number.class.isAssignableFrom(requiredType)) {
 			if (value instanceof Number) {
 				// Convert original Number to target Number class.
+				// 转换原始Number类型的实体到Number类
 				return NumberUtils.convertNumberToTargetClass(((Number) value), (Class<Number>) requiredType);
 			}
 			else {
 				// Convert stringified value to target Number class.
+				// 转换String类型的值到Number类
 				return NumberUtils.parseNumber(value.toString(),(Class<Number>) requiredType);
 			}
 		}
+		// Look!这里用到了Spring提供的一个Feature：全局的类型转换器ConversionService!!
 		else if (this.conversionService != null && this.conversionService.canConvert(value.getClass(), requiredType)) {
 			return this.conversionService.convert(value, requiredType);
 		}
+		// 如果执行到这里了，就表明Spring找不到一种合适的转换方式，只能抛出异常了！
 		else {
 			throw new IllegalArgumentException(
 					"Value [" + value + "] is of type [" + value.getClass().getName() +

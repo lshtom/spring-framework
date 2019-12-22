@@ -16,26 +16,6 @@
 
 package org.springframework.jdbc.core;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.sql.BatchUpdateException;
-import java.sql.CallableStatement;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLWarning;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import javax.sql.DataSource;
-
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.support.DataAccessUtils;
@@ -51,6 +31,14 @@ import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.StringUtils;
+
+import javax.sql.DataSource;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.*;
+import java.util.*;
 
 /**
  * <b>This is the central class in the JDBC core package.</b>
@@ -368,6 +356,8 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 		Assert.notNull(action, "Callback object must not be null");
 
 		Connection con = DataSourceUtils.getConnection(obtainDataSource());
+		// 由于此处要执行的SQL语句是不带参数的（无占位符?）,
+		// 所以此处不使用PreparedStatement对象。
 		Statement stmt = null;
 		try {
 			stmt = con.createStatement();
@@ -458,6 +448,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 
 	@Override
 	public <T> List<T> query(String sql, RowMapper<T> rowMapper) throws DataAccessException {
+		// 由于查询没有参数，所以此处只是将行数据映射器RowMapper进行了包装
 		return result(query(sql, new RowMapperResultSetExtractor<>(rowMapper)));
 	}
 
@@ -608,12 +599,26 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 			logger.debug("Executing prepared SQL statement" + (sql != null ? " [" + sql + "]" : ""));
 		}
 
+		// 【步骤1】：获取数据库连接
+		// 1）前面在创建JdbcTemplate对象时，会设置数据源进来，JdbcTemplate的父类的dataSource实例变量会持有数据源对象实例，
+		// 所以obtainDataSource方法就是将dataSource实例变量返回而已。
+		// 2）DataSourceUtils.getConnection方法：并非只是简单的调用DataSource的getConnection方法，
+		// 基于事务处理的特殊性，Spring要保证线程中的数据库操作都是使用同一个事务连接！
+		// 用到ThreadLocal，但具体是怎么做到的，尚有疑问？
 		Connection con = DataSourceUtils.getConnection(obtainDataSource());
 		PreparedStatement ps = null;
 		try {
+			// 【步骤2】：从入参psc（PreparedStatementCreator类型）中获取PreparedStatement对象实例
 			ps = psc.createPreparedStatement(con);
+			// 【步骤3】：应用用户设定的输入参数
+			// 如fetchSize：一次从数据库中取多少行数据回来（可以避免取多趟，减少网络开销）
+			// maxRows：设定ResultSet对象中可包含的最大行数限制
+			// 还有查询超时时间的设定。
 			applyStatementSettings(ps);
+			// 【步骤4】：调用回调函数，执行具体的SQL操作（增删查改）
+			// ！这就是执行通用方法外的个性化处理
 			T result = action.doInPreparedStatement(ps);
+			// 【步骤5】：警告处理
 			handleWarnings(ps);
 			return result;
 		}
@@ -632,6 +637,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 			throw translateException("PreparedStatementCallback", sql, ex);
 		}
 		finally {
+			// 【步骤6】：资源释放
 			if (psc instanceof ParameterDisposer) {
 				((ParameterDisposer) psc).cleanupParameters();
 			}
@@ -675,9 +681,14 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 						pss.setValues(ps);
 					}
 					rs = ps.executeQuery();
+					// res对象的类型为RowMapperResultSetExtractor,
+					// 在调用query方法时将RowMapper对象封装成了RowMapperResultSetExtractor，
+					// 因此RowMapperResultSetExtractor对象中持有RowMapper对象实例，
+					// 故下面的extractData方法的内部逻辑其实是回调RowMapper的mapRow方法进行行数据转换封装得到相应的POJO。
 					return rse.extractData(rs);
 				}
 				finally {
+					// 关闭结果集ResultSet
 					JdbcUtils.closeResultSet(rs);
 					if (pss instanceof ParameterDisposer) {
 						((ParameterDisposer) pss).cleanupParameters();
@@ -696,12 +707,14 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 	@Override
 	@Nullable
 	public <T> T query(String sql, @Nullable PreparedStatementSetter pss, ResultSetExtractor<T> rse) throws DataAccessException {
+		// 使用SimplePreparedStatementCreator对象对SQL语句进行封装
 		return query(new SimplePreparedStatementCreator(sql), pss, rse);
 	}
 
 	@Override
 	@Nullable
 	public <T> T query(String sql, Object[] args, int[] argTypes, ResultSetExtractor<T> rse) throws DataAccessException {
+		// 使用ArgumentTypePreparedStatementSetter对象对入参和入参类型进行封装
 		return query(sql, newArgTypePreparedStatementSetter(args, argTypes), rse);
 	}
 
@@ -754,6 +767,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 
 	@Override
 	public <T> List<T> query(String sql, Object[] args, int[] argTypes, RowMapper<T> rowMapper) throws DataAccessException {
+		// 使用RowMapperResultSetExtractor对象对rowMapper进行封装
 		return result(query(sql, args, argTypes, new RowMapperResultSetExtractor<>(rowMapper)));
 	}
 
@@ -794,7 +808,8 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 	@Nullable
 	public <T> T queryForObject(String sql, Object[] args, int[] argTypes, Class<T> requiredType)
 			throws DataAccessException {
-
+		// 其实queryForObject内部调用的还是query方法，与其他的query方法并无什么不同，
+		// 只不过是不需要用户自己去写RowMapper，而是由下面的getSingleColumnRowMapper方法返回相应的RowMapper
 		return queryForObject(sql, args, argTypes, getSingleColumnRowMapper(requiredType));
 	}
 
@@ -858,11 +873,48 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 
 		logger.debug("Executing prepared SQL update");
 
+		// 执行SQL
+		// execute方法是最为基础的操作，该方法有两个入参：
+		// 1）入参1：PreparedStatementCreator对象，也就是前面对SQL语句的封装
+		// 2）入参2：PreparedStatementCallback对象，PreparedStatementCallback接口只有一个方法doInPreparedStatement，
+		// 所以下面的ps->{...}这个lambda表达式语句等同的匿名内部类写法如下：
+		/**
+		execute(psc, new PreparedStatementCallback<Integer>() {
+			@Override
+			public Integer doInPreparedStatement(PreparedStatement ps) throws SQLException, DataAccessException {
+				...
+			}
+		});
+		 */
+		// Tips：所有的操作包括update、query等最终都是执行execute方法，
+		// 只是传入不同的PreparedStatementCallback参数来执行不同的逻辑而已。
 		return updateCount(execute(psc, ps -> {
 			try {
 				if (pss != null) {
+					// pss（PreparedStatementSetter类型）中封装了SQL语句中对应的参数及相应的类型（如果有的话），
+					// 比如SQL: INSERT INTO user(name,age,sex) VALUES(?,?,?)，
+					// 那么参数值 '王五',27,'男' 以及类型 Types.VARCHAR,Types.INTEGER,Types.VARCHAR 就被封装在PreparedStatementSetter对象中，
+					// 而下面的setValues方法的逻辑：就是取出这些参数值、类型，然后进行适配转换，并设置到PreparedStatement对象中，
+					// 这样子开发人员自己就完全不需要自己操作JDBC的原生方法进行繁琐的参数和类型设置了。
 					pss.setValues(ps);
 				}
+				// ps的类型是PreparedStatement，这个是java.sql包的，
+				// 其实剥开JdbcTemplate的层层封装后可以发现，最终调用的还是java.sql包下的PreparedStatement对象的方法！
+				// ！由于此处是update方法逻辑，
+				// 因此传入的PreparedStatementCallback参数的逻辑是调用PreparedStatement的executeUpdate方法。
+				// 如果要执行查询，那么所实现的PreparedStatementCallback匿名内部类（或lambda表达式）中的逻辑要调用的是executeQuery方法。
+
+				// Tips:这里得到的一个设计上最大的启发是：
+				// 要学会善用回调逻辑（或者说是要学会善用回调接口），
+				// 因为不管是执行update操作、query操作还是delete操作等，
+				// 其都有些公共逻辑，比如获取连接对象（Connection），关闭连接等，
+				// 这些公共的逻辑都可以抽到一个公共的方法中，就是execute方法，
+				// 而差异的逻辑怎么办呢？那自然是通过回调来调用差异逻辑，
+				// 不同的差异逻辑实现同一个回调接口，而公共的execute方法都是调用这个回调接口，
+				// 那具体的回调逻辑是什么呢？那就看所实现的回调接口对象即可！
+				// 这样子就避免了不同的逻辑都写一遍方法（包含了大量的冗余逻辑）！
+				// 回调的本质就是：公共逻辑中调用回调接口，实现“公共+差异”，但在公共方法中完全无需顾及具体的差异逻辑是啥，
+				// 因为我们不直接调用差异逻辑，调用的直接一个回调接口！！！
 				int rows = ps.executeUpdate();
 				if (logger.isTraceEnabled()) {
 					logger.trace("SQL update affected " + rows + " rows");
@@ -913,11 +965,13 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 
 	@Override
 	public int update(String sql, @Nullable PreparedStatementSetter pss) throws DataAccessException {
+		// 对SQL语句进行封装，封装成SimplePreparedStatementCreator对象
 		return update(new SimplePreparedStatementCreator(sql), pss);
 	}
 
 	@Override
 	public int update(String sql, Object[] args, int[] argTypes) throws DataAccessException {
+		// 利用方法newArgTypePreparedStatementSetter对入参进行封装，封装成PreparedStatementSetter类型对象
 		return update(sql, newArgTypePreparedStatementSetter(args, argTypes));
 	}
 
@@ -1402,6 +1456,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 	 * @see org.springframework.jdbc.SQLWarningException
 	 */
 	protected void handleWarnings(Statement stmt) throws SQLException {
+		// 当设置为忽略警告信息时，只尝试打印日志（默认就是忽略警告信息）
 		if (isIgnoreWarnings()) {
 			if (logger.isDebugEnabled()) {
 				SQLWarning warningToLog = stmt.getWarnings();
@@ -1412,6 +1467,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 				}
 			}
 		}
+		// 如果不忽略警告信息，那就是会抛出SQLWarningException异常
 		else {
 			handleWarnings(stmt.getWarnings());
 		}
