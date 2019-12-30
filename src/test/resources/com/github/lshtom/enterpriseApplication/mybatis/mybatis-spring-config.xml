@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	   xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource">
+		<property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
+		<property name="url" value="jdbc:mysql://localhost:3306/example2?serverTimezone=UTC"/>
+		<property name="username" value="root"/>
+		<property name="password" value="admin"/>
+	</bean>
+
+	<!--注：使用Mybatis最为关键的两件事：-->
+	<!--1.指明Mapper接口-->
+	<!--2.指明Mapper文件-->
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="dataSource"/>
+		<!--下面的userMapper的声明只是指明了Mapper接口，但Mapper文件的路径并没有指明,-->
+		<!--这个Mapper文件的路径是通过下面的MyBatis配置文件指明的。-->
+		<property name="configLocation"
+				  value="classpath:com/github/lshtom/enterpriseApplication/mybatis/mybatis-config2.xml"/>
+		<!--如果使用了下面的设置的话，其实可以不用专门的引入MyBatis配置文件了-->
+		<!--<property name="mapperLocations" value="classpath:com/github/lshtom/enterpriseApplication/mybatis/UserMapper.xml"/>-->
+		<!--<property name="typeAliases" value=""-->
+	</bean>
+
+	<!--如果不定义id为userMapper的Bean的话，我们就无法从容器中获取到UserMapper对象实例，-->
+	<!--而只能从容器中拿到SqlSessionFactory对象实例，然后再手动的打开获取SqlSession以及关闭SqlSession，-->
+	<!--这就起不到简化Mybatis使用的目的了！-->
+	<!--如果Mapper接口非常多的话，可以使用MapperScannerConfigure，这样就避免了为每一个Mapper接口声明相应的Bean-->
+	<!--<bean id="userMapper" class="org.mybatis.spring.mapper.MapperFactoryBean">-->
+		<!--<property name="mapperInterface" value="com.github.lshtom.enterpriseApplication.mybatis.mapper.UserMapper"/>-->
+		<!--<property name="sqlSessionFactory" ref="sqlSessionFactory"/>-->
+	<!--</bean>-->
+
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="com.github.lshtom.enterpriseApplication.mybatis.mapper"/>
+		<!--<property name="basePackage" value="${basePackage}"/>-->
+		<!--<property name="processPropertyPlaceHolders" value="true"/>-->
+		<!--<property name="annotationClass" value="java.lang.annotation.Documented"/>-->
+		<!--<property name="markerInterface" value="java.io.Serializable"/>-->
+	</bean>
+</beans>

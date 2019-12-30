@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration
+		PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-config.dtd">
+
+<configuration>
+	<!--其实这别名的定义不是必须的-->
+	<typeAliases>
+		<typeAlias type="com.github.lshtom.enterpriseApplication.mybatis.model.User" alias="user"/>
+	</typeAliases>
+	<!--在Mybatis自身的这个配置文件中，这一项配置是最为重要的，就是指明Mapper文件的路径-->
+	<mappers>
+		<mapper resource="com/github/lshtom/enterpriseApplication/mybatis/UserMapper.xml"/>
+	</mappers>
+</configuration>
