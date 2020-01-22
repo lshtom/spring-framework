@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface UserService {
 
+	void saveWithTransaction(User user);
+
 	void save(User user);
 
 	List<User> getUsers();

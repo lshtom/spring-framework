@@ -4,6 +4,7 @@ import com.github.lshtom.enterpriseApplication.jdbc.mapper.UserRowMapper;
 import com.github.lshtom.enterpriseApplication.jdbc.model.User;
 import com.github.lshtom.enterpriseApplication.jdbc.service.UserService;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Types;
@@ -15,6 +16,16 @@ public class UserServiceImpl implements UserService {
 
 	public void setDataSource(DataSource dataSource) {
 		this.jdbcTemplate = new JdbcTemplate(dataSource);
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void saveWithTransaction(User user) {
+		jdbcTemplate.update("INSERT INTO user(name,age,sex) VALUES(?,?,?)",
+				new Object[]{user.getName(), user.getAge(), user.getSex()},
+				new int[]{Types.VARCHAR, Types.INTEGER, Types.VARCHAR});
+		//throw new RuntimeException("测试事务");
+//		int a = 5 / 0;
 	}
 
 	@Override
