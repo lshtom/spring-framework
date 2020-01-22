@@ -16,18 +16,17 @@
 
 package org.springframework.transaction.interceptor;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.aop.support.AopUtils;
 import org.springframework.core.MethodClassKey;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ClassUtils;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Abstract implementation of {@link TransactionAttributeSource} that caches
@@ -95,6 +94,8 @@ public abstract class AbstractFallbackTransactionAttributeSource implements Tran
 		}
 
 		// First, see if we have a cached value.
+		// 【步骤1】：先判断是否有缓存，若有，则从缓存中获取已经解析出的事务相关属性配置，并返回
+		// Tips：这就是Spring一贯的做法，对于可能比较费时繁杂的解析等工作，都会去利用缓存！
 		Object cacheKey = getCacheKey(method, targetClass);
 		TransactionAttribute cached = this.attributeCache.get(cacheKey);
 		if (cached != null) {
@@ -107,11 +108,15 @@ public abstract class AbstractFallbackTransactionAttributeSource implements Tran
 				return cached;
 			}
 		}
+		// 【步骤2】：对当前目标Bean类的当前方法进行事务属性解析，并缓存、返回
 		else {
 			// We need to work it out.
+			// 解析相关事务属性配置
 			TransactionAttribute txAttr = computeTransactionAttribute(method, targetClass);
 			// Put it in the cache.
+			// 缓存已解析出的相关事务配置属性
 			if (txAttr == null) {
+				// 无相关事务配置属性，则放入NULL_TRANSACTION_ATTRIBUTE，起到标记作用
 				this.attributeCache.put(cacheKey, NULL_TRANSACTION_ATTRIBUTE);
 			}
 			else {
@@ -150,33 +155,44 @@ public abstract class AbstractFallbackTransactionAttributeSource implements Tran
 	@Nullable
 	protected TransactionAttribute computeTransactionAttribute(Method method, @Nullable Class<?> targetClass) {
 		// Don't allow no-public methods as required.
+		// 【步骤1】：检测当前的方法是否为公共方法
+		// 比如@Transactional注解，如果是用在方法上，那只能用在公共方法上
 		if (allowPublicMethodsOnly() && !Modifier.isPublic(method.getModifiers())) {
 			return null;
 		}
 
+		// 【步骤2】：依次按照“类中的方法”->“类”->“接口中的方法”->“接口”的顺序去获取相应的事务配置属性，
+		// 只要这个过程中获取到事务配置属性，则直接返回，不再往下。
+		// Tips：这里用到了【模板方法模式】，findTransactionAttribute等均为抽象方法，待子类覆写实现
 		// The method may be on an interface, but we need attributes from the target class.
 		// If the target class is null, the method will be unchanged.
+		// 说明：method代表接口中的方法，specificMethod代表实现类中的方法
 		Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
 
 		// First try is the method in the target class.
+		// 【步骤2-1】：获取“类中的方法”上的事务配置属性
 		TransactionAttribute txAttr = findTransactionAttribute(specificMethod);
 		if (txAttr != null) {
 			return txAttr;
 		}
 
 		// Second try is the transaction attribute on the target class.
+		// 【步骤2-2】：获取“目前类”上的事务配置属性
 		txAttr = findTransactionAttribute(specificMethod.getDeclaringClass());
 		if (txAttr != null && ClassUtils.isUserLevelMethod(method)) {
 			return txAttr;
 		}
 
+		// specificMethod与method不等，意味着存在接口（即当前类的当前方法其实是实现了接口的方法）
 		if (specificMethod != method) {
 			// Fallback is to look at the original method.
+			// 【步骤2-3】：获取“接口中的方法”上的事务配置属性
 			txAttr = findTransactionAttribute(method);
 			if (txAttr != null) {
 				return txAttr;
 			}
 			// Last fallback is the class of the original method.
+			// 【步骤2-4】：获取“接口”上的事务配置属性
 			txAttr = findTransactionAttribute(method.getDeclaringClass());
 			if (txAttr != null && ClassUtils.isUserLevelMethod(method)) {
 				return txAttr;

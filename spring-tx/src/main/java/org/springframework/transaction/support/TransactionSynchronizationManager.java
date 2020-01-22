@@ -136,6 +136,7 @@ public abstract class TransactionSynchronizationManager {
 	 */
 	@Nullable
 	public static Object getResource(Object key) {
+		// 入参Key为数据源对象实例，因此下面的这actualKey可以唯一标识某连接（ConnectionHolder，或者准确的说是其父类ResourceHolder）
 		Object actualKey = TransactionSynchronizationUtils.unwrapResourceIfNecessary(key);
 		Object value = doGetResource(actualKey);
 		if (value != null && logger.isTraceEnabled()) {
@@ -150,12 +151,15 @@ public abstract class TransactionSynchronizationManager {
 	 */
 	@Nullable
 	private static Object doGetResource(Object actualKey) {
+		// resources为ThreadLocal类型变量，其所存储的是：数据源Key-ConnectionHolder实例 映射
+		// Tips：对于JDBC而言，资源其实就连接实例，因此此方法中所获取的资源其实就是连接
 		Map<Object, Object> map = resources.get();
 		if (map == null) {
 			return null;
 		}
 		Object value = map.get(actualKey);
 		// Transparently remove ResourceHolder that was marked as void...
+		// 对于被标记为无效的连接从缓存中进行清除
 		if (value instanceof ResourceHolder && ((ResourceHolder) value).isVoid()) {
 			map.remove(actualKey);
 			// Remove entire ThreadLocal if empty...
@@ -262,6 +266,10 @@ public abstract class TransactionSynchronizationManager {
 	 * @see #registerSynchronization
 	 */
 	public static boolean isSynchronizationActive() {
+		// synchronizations为ThreadLocal类型的变量，其中保存的是当前线程下事务同步回调接口TransactionSynchronization对象实例，
+		// 如果当前线程下synchronizations有值，则意味着当前线程设置了同步事务。
+		// Tips：这synchronizations是在AbstractPlatformTransactionManager类的prepareSynchronization方法中设置的（这prepareSynchronization方法在getTransaction方法中被调用），
+		// 所以第一次执行到此处获取到的值为null（毕竟还没执行到prepareSynchronization方法）
 		return (synchronizations.get() != null);
 	}
 

@@ -278,34 +278,57 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
 			final InvocationCallback invocation) throws Throwable {
 
+		// 【步骤1】：获取进行事务处理所需的属性值、事务管理器和方法唯一标识
 		// If the transaction attribute is null, the method is non-transactional.
 		TransactionAttributeSource tas = getTransactionAttributeSource();
+		// 获取事务配置属性
 		final TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
+		// 获取事务管理器
 		final PlatformTransactionManager tm = determineTransactionManager(txAttr);
+		// 构建方法的唯一标识（其实就是所在类全限定名+方法名）
 		final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
+		// 【步骤2】：声明式事务处理
+		// 说明：Spring中判断是否为声明式事务的逻辑：有没有事务配置 or 事务管理器是否为CallbackPreferringPlatformTransactionManager类型
+		// 对于编程式事务而言，其实是不需要进行事务配置的，因为事务的提交、回滚等操作都是硬编码，还要啥配置
 		if (txAttr == null || !(tm instanceof CallbackPreferringPlatformTransactionManager)) {
 			// Standard transaction demarcation with getTransaction and commit/rollback calls.
+			// 【步骤2-1】：创建事务
+			// Tips：TransactionInfo并不等同于TransactionAttribute，
+			// TransactionInfo中除了包括TransactionAttribute外，还包括了PlatformTransactionManager、TransactionStatus等信息
 			TransactionInfo txInfo = createTransactionIfNecessary(tm, txAttr, joinpointIdentification);
 
 			Object retVal;
 			try {
 				// This is an around advice: Invoke the next interceptor in the chain.
 				// This will normally result in a target object being invoked.
+				// 【步骤2-2】：执行增强链的下一个方法
+				// Tips：这个事务增强本质上是一个环绕增强，增强链的执行在这个try块中，
+				// 这里可能会简单的认为此处就直接调用目标方法，但试想一下：目标方法也可能是被AOP增强的，
+				// 因此，这就引出一个Feature：当Spring检测到目标方法上多个适配的增强时，事务增强应该是被排到最高优先级的，
+				// 也就是最先执行。
 				retVal = invocation.proceedWithInvocation();
 			}
 			catch (Throwable ex) {
 				// target invocation exception
+				// 【步骤2-3】：如果发生了异常，则进行异常回滚
 				completeTransactionAfterThrowing(txInfo, ex);
 				throw ex;
 			}
 			finally {
+				// 【步骤2-4】：清除信息
 				cleanupTransactionInfo(txInfo);
 			}
+			// 【步骤2-5】：提交事务
 			commitTransactionAfterReturning(txInfo);
 			return retVal;
 		}
 
+		// 【步骤3】：编程式事务处理
+		// ！！！不是很明白 什么情形下会执行到此处？
+		// 因为只有对增强链的调用才会执行该方法，
+		// 而我们在使用编程式事务时，是自己获取事务管理器，然后自己执行相关业务逻辑，所以不存在代理增强的问题，
+		// 所以怎么会执行到这里呢？？？
 		else {
 			final ThrowableHolder throwableHolder = new ThrowableHolder();
 
@@ -375,6 +398,9 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	 */
 	@Nullable
 	protected PlatformTransactionManager determineTransactionManager(@Nullable TransactionAttribute txAttr) {
+		// 说明：这方法咋一看好像有点复杂，其实本质逻辑很简单，
+		// 就是尝试从BeanFactory容器中根据Bean名称或类型去获取事务管理器实例
+
 		// Do not attempt to lookup tx manager if no tx attributes are set
 		if (txAttr == null || this.beanFactory == null) {
 			return getTransactionManager();
@@ -460,6 +486,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			@Nullable TransactionAttribute txAttr, final String joinpointIdentification) {
 
 		// If no name specified, apply method identification as transaction name.
+		// 【步骤1】：如果没有名称则使用方法为唯一标识，并使用DelegatingTransactionAttribute封装txAttr
 		if (txAttr != null && txAttr.getName() == null) {
 			txAttr = new DelegatingTransactionAttribute(txAttr) {
 				@Override
@@ -469,6 +496,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			};
 		}
 
+		// 【步骤2】：获取TransactionStatus
 		TransactionStatus status = null;
 		if (txAttr != null) {
 			if (tm != null) {
@@ -481,6 +509,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 				}
 			}
 		}
+		// 【步骤3】：根据属性与TransactionStatus准备一个TransactionInfo
 		return prepareTransactionInfo(tm, txAttr, joinpointIdentification, status);
 	}
 
@@ -503,6 +532,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 				logger.trace("Getting transaction for [" + txInfo.getJoinpointIdentification() + "]");
 			}
 			// The transaction manager will flag an error if an incompatible tx already exists.
+			// 记录事务状态
 			txInfo.newTransactionStatus(status);
 		}
 		else {
@@ -517,6 +547,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 		// We always bind the TransactionInfo to the thread, even if we didn't create
 		// a new transaction here. This guarantees that the TransactionInfo stack
 		// will be managed correctly even if no transaction was created by this aspect.
+		// 将TransactionInfo对象实例绑定到当前线程
 		txInfo.bindToThread();
 		return txInfo;
 	}
@@ -531,6 +562,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			if (logger.isTraceEnabled()) {
 				logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() + "]");
 			}
+			// 获取事务管理器然后提交事务
 			txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
 		}
 	}
@@ -542,11 +574,14 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	 * @param ex throwable encountered
 	 */
 	protected void completeTransactionAfterThrowing(@Nullable TransactionInfo txInfo, Throwable ex) {
+		// 【步骤1】：首先判断当前是否存在事务，如果没有事务，那也不存在什么回滚的事了
 		if (txInfo != null && txInfo.getTransactionStatus() != null) {
 			if (logger.isTraceEnabled()) {
 				logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() +
 						"] after exception: " + ex);
 			}
+			// 【步骤2】：判断是否满足事务回滚条件，若满足则事务回滚
+			// 说明：事务是否回滚的依据就是当前的所发生的异常的类型
 			if (txInfo.transactionAttribute != null && txInfo.transactionAttribute.rollbackOn(ex)) {
 				try {
 					txInfo.getTransactionManager().rollback(txInfo.getTransactionStatus());
@@ -564,6 +599,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 			else {
 				// We don't roll back on this exception.
 				// Will still roll back if TransactionStatus.isRollbackOnly() is true.
+				// 【步骤3】：对于不满足回滚条件的，即使当前存在异常也会进行事务提交
 				try {
 					txInfo.getTransactionManager().commit(txInfo.getTransactionStatus());
 				}

@@ -63,6 +63,10 @@ public class AopNamespaceHandler extends NamespaceHandlerSupport {
 	public void init() {
 		// 将相应的自定义标签（aop相关标签也属于自定义标签的一种）的解析器进行注册
 		// In 2.0 XSD as well as in 2.1 XSD.
+		// 对早期的在XML中进行的事务配置进行兼容支持？注册标签<aop:config/>的解析器
+		// ConfigBeanDefinitionParser类的parse方法中会调用到AopNamespaceUtils.registerAspectJAutoProxyCreatorIfNecessary，
+		// 现在使用AOP功能一般直接使用注解的了，而以前都是在XML中进行AOP配置，包括切点、切面的配置，
+		// 这就需要用到<aop:config/>标签、<aop:pointcut />标签和<aop:advisor />标签。
 		registerBeanDefinitionParser("config", new ConfigBeanDefinitionParser());
 		// 注册标签<aop:aspectj-autoproxy/>的解析器
 		registerBeanDefinitionParser("aspectj-autoproxy", new AspectJAutoProxyBeanDefinitionParser());

@@ -62,6 +62,8 @@ class AnnotationDrivenBeanDefinitionParser implements BeanDefinitionParser {
 	public BeanDefinition parse(Element element, ParserContext parserContext) {
 		registerTransactionalEventListenerFactory(parserContext);
 		String mode = element.getAttribute("mode");
+		// 获取事务切入的模式，默认是proxy
+		// 比如<tx:annotation-driven transaction-manager="transactionManager" mode="aspectj"/>就是指明以AspectJ的模式进行事务切入
 		if ("aspectj".equals(mode)) {
 			// mode="aspectj"
 			registerTransactionAspect(element, parserContext);
@@ -119,13 +121,23 @@ class AnnotationDrivenBeanDefinitionParser implements BeanDefinitionParser {
 	private static class AopAutoProxyConfigurer {
 
 		public static void configureAutoProxyCreator(Element element, ParserContext parserContext) {
+			// 【步骤1】：注册对象代理创建器
+			// 说明：事务本质上是利用代理实现的，任何标上了@Transactional注解的类或方法，Spring都会为其所在的类创建代理对象
 			AopNamespaceUtils.registerAutoProxyCreatorIfNecessary(parserContext, element);
 
+			// 【步骤2】：判断是否注册了事务相关BeanDefinition，若无则进行注册
+			// 说明：事务相关的Bean分别为：AnnotationTransactionAttributeSource、TransactionInterceptor、BeanFactoryTransactionAttributeSourceAdvisor，
+			// 其中对于前面两个BeanDefinition的注册，是通过XmlReaderContext的registerWithGeneratedName方法进行的，
+			// 这个方法的作用是调用者无需指明所要注册的BeanDefiniton的Id（Name），方法内部会为其生成相应的BeanName，然后调用BeanDefinitionRegistry的registerBeanDefinition完成注册，
+			// 只有最后的第3个BeanDefinition会以TRANSACTION_ADVISOR_BEAN_NAME（变量txAdvisorBeanName的值）为名进行注册（指定名称注册）,
+			// 因此，判断容器中是否注册了事务相关Bean，
+			// 方法就是判断容器中是否有名为org.springframework.transaction.config.internalTransactionAdvisor（TRANSACTION_ADVISOR_BEAN_NAME的值）的BeanDefinition！
 			String txAdvisorBeanName = TransactionManagementConfigUtils.TRANSACTION_ADVISOR_BEAN_NAME;
 			if (!parserContext.getRegistry().containsBeanDefinition(txAdvisorBeanName)) {
 				Object eleSource = parserContext.extractSource(element);
 
 				// Create the TransactionAttributeSource definition.
+				// 【步骤2-1】：创建AnnotationTransactionAttributeSource BeanDefinition并注册
 				RootBeanDefinition sourceDef = new RootBeanDefinition(
 						"org.springframework.transaction.annotation.AnnotationTransactionAttributeSource");
 				sourceDef.setSource(eleSource);
@@ -133,6 +145,8 @@ class AnnotationDrivenBeanDefinitionParser implements BeanDefinitionParser {
 				String sourceName = parserContext.getReaderContext().registerWithGeneratedName(sourceDef);
 
 				// Create the TransactionInterceptor definition.
+				// 【步骤2-2】：创建TransactionInterceptor BeanDefinition并注册
+				// 说明：TransactionInterceptor类的属性transactionAttributeSource来自AnnotationTransactionAttributeSource对象实例
 				RootBeanDefinition interceptorDef = new RootBeanDefinition(TransactionInterceptor.class);
 				interceptorDef.setSource(eleSource);
 				interceptorDef.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
@@ -141,6 +155,10 @@ class AnnotationDrivenBeanDefinitionParser implements BeanDefinitionParser {
 				String interceptorName = parserContext.getReaderContext().registerWithGeneratedName(interceptorDef);
 
 				// Create the TransactionAttributeSourceAdvisor definition.
+				// 【步骤2-3】：创建BeanFactoryTransactionAttributeSourceAdvisor BeanDefinition并注册
+				// 说明：BeanFactoryTransactionAttributeSourceAdvisor中有两个属性变量需要进行注入：
+				// transactionAttributeSource <= AnnotationTransactionAttributeSource对象实例
+				// adviceBeanName <= TransactionInterceptor对象实例
 				RootBeanDefinition advisorDef = new RootBeanDefinition(BeanFactoryTransactionAttributeSourceAdvisor.class);
 				advisorDef.setSource(eleSource);
 				advisorDef.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
@@ -151,6 +169,15 @@ class AnnotationDrivenBeanDefinitionParser implements BeanDefinitionParser {
 				}
 				parserContext.getRegistry().registerBeanDefinition(txAdvisorBeanName, advisorDef);
 
+				// 【步骤2-4】：创建CompositeComponentDefinition实例，并包含上面所注册的3个BeanDefinition，然后注册
+				// Tips：CompositeComponentDefinition以及将其注册的作用是：
+				// CompositeComponentDefinition实例中将持有相应的BeanDefinition的视图，
+				// 然后在registerComponent方法中将会触发相应的消息，将这BeanDefinition的视图以消息的形式广播出去，
+				// 所注册ReaderEventListener实例将会被调用，这样用户就可以获取到相应的BeanDefinition的视图（可以理解为配置数据）。
+				// 注意：这里没有用到广播器，只会去回调唯一的ReaderEventListener，如果用户不注册的话，那就是默认的一个空实现！
+				// ！Tips：这就是Spring所提供的另一种获取Bean的配置数据（BeanDefinition）的机制，
+				// 一般情况下，我们都是先获取到BeanFactory，然后再利用BeanFactory来获取到相应的BeanDefinition，
+				// 而此处所实现的呢，就是利用监听器来拿到这BeanDefinition！
 				CompositeComponentDefinition compositeDef = new CompositeComponentDefinition(element.getTagName(), eleSource);
 				compositeDef.addNestedComponent(new BeanComponentDefinition(sourceDef, sourceName));
 				compositeDef.addNestedComponent(new BeanComponentDefinition(interceptorDef, interceptorName));

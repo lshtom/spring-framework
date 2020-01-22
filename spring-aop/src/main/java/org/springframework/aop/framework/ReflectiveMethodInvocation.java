@@ -209,6 +209,7 @@ public class ReflectiveMethodInvocation implements ProxyMethodInvocation, Clonea
 			 * MethodBeforeAdviceInterceptor
 			 * AspectJAroundAdvice
 			 * AspectJAfterAdvice
+			 * TransactionInterceptor
 			 * ......
 			 */
 			// It's an interceptor, so we just invoke it: The pointcut will have

@@ -123,6 +123,10 @@ public abstract class AopConfigUtils {
 
 		// 【步骤1】：判断容器中是否已经了自动代理创建器（AnnotationAwareAspectJAutoProxyCreator），
 		// 若存在则且与现在的不一致，则需要根据优先级来判断到底该使用哪个。
+		// Tips：如果同时开启了AOP和事务的话，那么将会调用两次这方法，
+		// 对于AOP，所注册的BeanDefinition的beanClass为AnnotationAwareAspectJAutoProxyCreator
+		// 对于事务，所注册的BeanDefinition的beanClass为InfrastructureAdvisorAutoProxyCreator，
+		// 但是beanName(Id)都是同一个，所以就需要下面的这优先级判断逻辑了！
 		if (registry.containsBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME)) {
 			BeanDefinition apcDefinition = registry.getBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME);
 			// 不一致则进行判断处理，根据优先级来决定使用哪个

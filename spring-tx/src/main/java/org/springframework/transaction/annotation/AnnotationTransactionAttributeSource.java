@@ -16,6 +16,12 @@
 
 package org.springframework.transaction.annotation;
 
+import org.springframework.lang.Nullable;
+import org.springframework.transaction.interceptor.AbstractFallbackTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionAttribute;
+import org.springframework.util.Assert;
+import org.springframework.util.ClassUtils;
+
 import java.io.Serializable;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
@@ -23,12 +29,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
-
-import org.springframework.lang.Nullable;
-import org.springframework.transaction.interceptor.AbstractFallbackTransactionAttributeSource;
-import org.springframework.transaction.interceptor.TransactionAttribute;
-import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 
 /**
  * Implementation of the
@@ -90,7 +90,13 @@ public class AnnotationTransactionAttributeSource extends AbstractFallbackTransa
 	 * (typically used with AspectJ class weaving)
 	 */
 	public AnnotationTransactionAttributeSource(boolean publicMethodsOnly) {
+		// 说明：由于不仅只有Spring事务配置，也可能使用了JTA事务、EJB事务配置等，
+		// 故需要考虑加载相应的事务配置解析器！
+
 		this.publicMethodsOnly = publicMethodsOnly;
+		// 只有当前类加载器加载了类javax.transaction.Transactional 和 javax.ejb.TransactionAttribute，
+		// 才会创建解析器实例JtaTransactionAnnotationParser或Ejb3TransactionAnnotationParser，
+		// 否则默认只是创建Spring事务配置的解析器SpringTransactionAnnotationParser对象实例。
 		if (jta12Present || ejb3Present) {
 			this.annotationParsers = new LinkedHashSet<>(4);
 			this.annotationParsers.add(new SpringTransactionAnnotationParser());
@@ -161,7 +167,9 @@ public class AnnotationTransactionAttributeSource extends AbstractFallbackTransa
 	 */
 	@Nullable
 	protected TransactionAttribute determineTransactionAttribute(AnnotatedElement element) {
+		// 依次遍历各事务配置解析器，并利用事务配置解析器进行解析
 		for (TransactionAnnotationParser annotationParser : this.annotationParsers) {
+			// 默认下用的解析器是SpringTransactionAnnotationParser(就是默认下用的都是Spring事务，而非JTA事务、EJB事务)
 			TransactionAttribute attr = annotationParser.parseTransactionAnnotation(element);
 			if (attr != null) {
 				return attr;

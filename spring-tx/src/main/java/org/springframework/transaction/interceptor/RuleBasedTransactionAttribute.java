@@ -139,6 +139,9 @@ public class RuleBasedTransactionAttribute extends DefaultTransactionAttribute i
 
 		if (this.rollbackRules != null) {
 			for (RollbackRuleAttribute rule : this.rollbackRules) {
+				// RollbackRuleAttribute实例变量中持有@Transactional注解中的属性rollbackFor所指定的异常的全限定名，
+				// getDepth方法的逻辑就是计算出当前所抛出的异常与rollbackFor所指定的异常在继承链路上的距离，
+				// 若距离大于等于0，则表明当前所抛出的异常为rollbackFor所指定的异常或为其子类，即意味着满足条件。
 				int depth = rule.getDepth(ex);
 				if (depth >= 0 && depth < deepest) {
 					deepest = depth;
@@ -157,6 +160,8 @@ public class RuleBasedTransactionAttribute extends DefaultTransactionAttribute i
 			return super.rollbackOn(ex);
 		}
 
+		// 一般来说，winner非空也就意味着满足条件了，此处相当于加多了一个控制点，
+		// 可实现前面就算符合回滚条件，此处也可将其设定为不回滚！（个人理解）
 		return !(winner instanceof NoRollbackRuleAttribute);
 	}
 

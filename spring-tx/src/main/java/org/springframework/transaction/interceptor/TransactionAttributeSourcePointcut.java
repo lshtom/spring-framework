@@ -16,14 +16,14 @@
 
 package org.springframework.transaction.interceptor;
 
-import java.io.Serializable;
-import java.lang.reflect.Method;
-
 import org.springframework.aop.support.StaticMethodMatcherPointcut;
 import org.springframework.dao.support.PersistenceExceptionTranslator;
 import org.springframework.lang.Nullable;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.util.ObjectUtils;
+
+import java.io.Serializable;
+import java.lang.reflect.Method;
 
 /**
  * Inner class that implements a Pointcut that matches if the underlying
@@ -37,11 +37,19 @@ abstract class TransactionAttributeSourcePointcut extends StaticMethodMatcherPoi
 
 	@Override
 	public boolean matches(Method method, Class<?> targetClass) {
+		// 说明：该matches方法的入参为：
+		// method -> 当前目标Bean类的某方法
+		// targetClass -> 当前目标Bean的类型
+
+		// 【步骤1】：判断当前的Bean类及其父类是否实现了TransactionalProxy、PlatformTransactionManager和PersistenceExceptionTranslator接口，
+		// 若实现了，则当前Bean类为事务管理器等等，并非我们要进行代理增强的目标Bean类，故返回false。
 		if (TransactionalProxy.class.isAssignableFrom(targetClass) ||
 				PlatformTransactionManager.class.isAssignableFrom(targetClass) ||
 				PersistenceExceptionTranslator.class.isAssignableFrom(targetClass)) {
 			return false;
 		}
+		// 【步骤2】：尝试对当前正在处理的目标Bean类的当前方法进行事务相关配置属性的获取，若能获取到则表明匹配
+		// Tips：利用了AnnotationTransactionAttributeSource对象实例的getTransactionAttribute方法
 		TransactionAttributeSource tas = getTransactionAttributeSource();
 		return (tas == null || tas.getTransactionAttribute(method, targetClass) != null);
 	}

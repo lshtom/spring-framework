@@ -53,6 +53,7 @@ public class BeanFactoryTransactionAttributeSourceAdvisor extends AbstractBeanFa
 	 * @see TransactionInterceptor#setTransactionAttributeSource
 	 */
 	public void setTransactionAttributeSource(TransactionAttributeSource transactionAttributeSource) {
+		// 传入的TransactionAttributeSource对象其实为AnnotationTransactionAttributeSource类型的对象实例
 		this.transactionAttributeSource = transactionAttributeSource;
 	}
 
