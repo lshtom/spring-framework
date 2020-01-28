@@ -196,6 +196,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	 */
 	@Override
 	public void afterPropertiesSet() {
+		// 说明：这是AbstractHandlerMethodMapping一族的初始化入口
 		initHandlerMethods();
 	}
 
@@ -206,8 +207,11 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	 * @see #handlerMethodsInitialized
 	 */
 	protected void initHandlerMethods() {
+		// 【步骤1】：获取所有候选的Handler的BeanName（或者说是：所有的Bean都将作为候选的Handler），
+		// 并逐一遍历处理。
 		for (String beanName : getCandidateBeanNames()) {
 			if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
+				// 【步骤2】：处理候选Bean
 				processCandidateBean(beanName);
 			}
 		}
@@ -222,7 +226,10 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	 */
 	protected String[] getCandidateBeanNames() {
 		return (this.detectHandlerMethodsInAncestorContexts ?
+				// 下面这两行的区别是：上面这行是获取当前容器以及父容器中所有的Bean类
 				BeanFactoryUtils.beanNamesForTypeIncludingAncestors(obtainApplicationContext(), Object.class) :
+				// getBeanNamesForType会获取当前类为Object类或父类为Object类的Bean的名称，
+				// 其与上面最大的区别是其仅仅是获取当前容器中的Bean类，而不会去获取父容器中的Bean类
 				obtainApplicationContext().getBeanNamesForType(Object.class));
 	}
 
@@ -248,6 +255,8 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 				logger.trace("Could not resolve type for bean '" + beanName + "'", ex);
 			}
 		}
+		// 判断当前Bean是否为Handler，若是，则进一步发现检测当前Bean类中的HandlerMethod（就是Method级的Handler）
+		// isHandler为模板方法，由子类覆写实现
 		if (beanType != null && isHandler(beanType)) {
 			detectHandlerMethods(beanName);
 		}
@@ -259,14 +268,19 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	 * @see #getMappingForMethod
 	 */
 	protected void detectHandlerMethods(Object handler) {
+		// 【步骤1】：获取Handler的类型
 		Class<?> handlerType = (handler instanceof String ?
 				obtainApplicationContext().getType((String) handler) : handler.getClass());
 
 		if (handlerType != null) {
+			// 【步骤2】：如果是CGLib代理的子对象类型，则返回父类型，否则直接返回传入的类型
 			Class<?> userType = ClassUtils.getUserClass(handlerType);
+			// 【步骤3】：获取当前Handler里所有符合要求的Method
 			Map<Method, T> methods = MethodIntrospector.selectMethods(userType,
 					(MethodIntrospector.MetadataLookup<T>) method -> {
 						try {
+							// 查找符合条件的Method，返回值为RequestMappingInfo类型，
+							// 封装了映射匹配信息。
 							return getMappingForMethod(method, userType);
 						}
 						catch (Throwable ex) {
@@ -277,6 +291,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 			if (logger.isTraceEnabled()) {
 				logger.trace(formatMappings(userType, methods));
 			}
+			// 【步骤4】：遍历所有符合要求的Method，并注册
 			methods.forEach((method, mapping) -> {
 				Method invocableMethod = AopUtils.selectInvocableMethod(method, userType);
 				registerHandlerMethod(handler, invocableMethod, mapping);
@@ -359,10 +374,16 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	 */
 	@Override
 	protected HandlerMethod getHandlerInternal(HttpServletRequest request) throws Exception {
+		// 说明：该方法是覆写了父类AbstractHandlerMapping的getHandlerInternal模板方法
+
+		// 【步骤1】：根据请求request获取lookupPath
 		String lookupPath = getUrlPathHelper().getLookupPathForRequest(request);
 		this.mappingRegistry.acquireReadLock();
 		try {
+			// 【步骤2】：根据lookupPath和request获取HandlerMethod
 			HandlerMethod handlerMethod = lookupHandlerMethod(lookupPath, request);
+			// 【步骤3】：考虑到前一步中所获取到的Handler可能为BeanName等，
+			// 此处再进一步判断处理，并封装成HandlerMethod对象返回。
 			return (handlerMethod != null ? handlerMethod.createWithResolvedBean() : null);
 		}
 		finally {
@@ -382,15 +403,19 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 	@Nullable
 	protected HandlerMethod lookupHandlerMethod(String lookupPath, HttpServletRequest request) throws Exception {
 		List<Match> matches = new ArrayList<>();
+		// 【步骤1】：首先是直接根据lookupPath去尝试获取
 		List<T> directPathMatches = this.mappingRegistry.getMappingsByUrl(lookupPath);
 		if (directPathMatches != null) {
 			addMatchingMappings(directPathMatches, matches, request);
 		}
+		// 【步骤2】：如果为空，也就是上一步中直接获取没有结果的话，此处将mappingRegistry中所有的进行匹配判断处理
 		if (matches.isEmpty()) {
 			// No choice but to go through all mappings...
 			addMatchingMappings(this.mappingRegistry.getMappings().keySet(), matches, request);
 		}
 
+		// 【步骤3】：如果经过上面条件判断后得到的符合条件的集合非空，那么将排序，选出最优的，
+		// 同时还要考虑到可能同时有多个一样优的情形，并进行处理。
 		if (!matches.isEmpty()) {
 			Comparator<Match> comparator = new MatchComparator(getMappingComparator(request));
 			matches.sort(comparator);
@@ -402,6 +427,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 				if (CorsUtils.isPreFlightRequest(request)) {
 					return PREFLIGHT_AMBIGUOUS_MATCH;
 				}
+				// 处理可能存在的同时有多个最优的情形
 				Match secondBestMatch = matches.get(1);
 				if (comparator.compare(bestMatch, secondBestMatch) == 0) {
 					Method m1 = bestMatch.handlerMethod.getMethod();
@@ -416,14 +442,17 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 			return bestMatch.handlerMethod;
 		}
 		else {
+			// 【步骤4】：若经判断处理后，没有找到合适的，则返回null
 			return handleNoMatch(this.mappingRegistry.getMappings().keySet(), lookupPath, request);
 		}
 	}
 
 	private void addMatchingMappings(Collection<T> mappings, List<Match> matches, HttpServletRequest request) {
 		for (T mapping : mappings) {
+			// 进行匹配判断处理
 			T match = getMatchingMapping(mapping, request);
 			if (match != null) {
+				// 找到匹配的则加入matches，本质上matches是作为addMatchingMappings方法的出参！
 				matches.add(new Match(match, this.mappingRegistry.getMappings().get(mapping)));
 			}
 		}

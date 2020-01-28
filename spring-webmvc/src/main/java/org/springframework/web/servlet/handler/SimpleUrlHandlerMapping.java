@@ -56,6 +56,8 @@ import org.springframework.util.CollectionUtils;
  */
 public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 
+	// 有别于父类AbstractUrlHandlerMapping中的handlerMap，
+	// 当前类中定义的urlMap用于先缓存其所注册的Handler，之后再注册到父类的handlerMap中。
 	private final Map<String, Object> urlMap = new LinkedHashMap<>();
 
 
@@ -101,6 +103,9 @@ public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 	 */
 	@Override
 	public void initApplicationContext() throws BeansException {
+		// 说明：重写了父类的initApplicationContext，
+		// 也就是在初始化的时候会进行Handler注册
+
 		super.initApplicationContext();
 		registerHandlers(this.urlMap);
 	}
@@ -125,6 +130,7 @@ public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 				if (handler instanceof String) {
 					handler = ((String) handler).trim();
 				}
+				// 调用父类AbstractUrlHandlerMapping的registerHandler方法进行注册
 				registerHandler(url, handler);
 			});
 			if (logger.isDebugEnabled()) {

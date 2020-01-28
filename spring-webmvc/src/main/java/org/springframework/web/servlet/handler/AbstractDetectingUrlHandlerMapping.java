@@ -55,6 +55,9 @@ public abstract class AbstractDetectingUrlHandlerMapping extends AbstractUrlHand
 	 */
 	@Override
 	public void initApplicationContext() throws ApplicationContextException {
+		// 说明：重写了父类的initApplicationContext，
+		// 也就是在初始化的时候会进行Handler注册
+
 		super.initApplicationContext();
 		detectHandlers();
 	}
@@ -75,6 +78,8 @@ public abstract class AbstractDetectingUrlHandlerMapping extends AbstractUrlHand
 
 		// Take any bean name that we can determine URLs for.
 		for (String beanName : beanNames) {
+			// 使用beanName解析成URL，如果解析到就注册到父类的handlerMap中
+			// determineUrlsForHandler为模板方法，由子类覆写实现
 			String[] urls = determineUrlsForHandler(beanName);
 			if (!ObjectUtils.isEmpty(urls)) {
 				// URL paths found: Let's consider it a handler.

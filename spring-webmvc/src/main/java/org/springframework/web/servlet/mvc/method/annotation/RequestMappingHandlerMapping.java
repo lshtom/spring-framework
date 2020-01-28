@@ -202,8 +202,12 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	 */
 	@Override
 	protected boolean isHandler(Class<?> beanType) {
+		// 判断当前Bean类上是否有@Controller注解或@RequestMapping注解
 		return (AnnotatedElementUtils.hasAnnotation(beanType, Controller.class) ||
 				AnnotatedElementUtils.hasAnnotation(beanType, RequestMapping.class));
+
+		// 说明：新的SpringMVC代码中之所以没有了AbstractControllerUrlHandlerMapping类，
+		// 原因就是该类的功能被整合到了此处。
 	}
 
 	/**
@@ -217,8 +221,11 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 	@Override
 	@Nullable
 	protected RequestMappingInfo getMappingForMethod(Method method, Class<?> handlerType) {
+		// 寻找当前方法上的@RequestMapping注解，若无则返回null
+		// Tips：像@GetMapping、@PostMapping等这些注解，其定义上含有@RequestMapping注解！
 		RequestMappingInfo info = createRequestMappingInfo(method);
 		if (info != null) {
+			// 寻找当前类上的@RequestMapping注解，若无则返回null
 			RequestMappingInfo typeInfo = createRequestMappingInfo(handlerType);
 			if (typeInfo != null) {
 				info = typeInfo.combine(info);
@@ -257,6 +264,7 @@ public class RequestMappingHandlerMapping extends RequestMappingInfoHandlerMappi
 		RequestMapping requestMapping = AnnotatedElementUtils.findMergedAnnotation(element, RequestMapping.class);
 		RequestCondition<?> condition = (element instanceof Class ?
 				getCustomTypeCondition((Class<?>) element) : getCustomMethodCondition((Method) element));
+		// 下面是createRequestMappingInfo的重载方法，其中主要的逻辑是封装了所获取到得@RequestMapping注解上的各配置属性
 		return (requestMapping != null ? createRequestMappingInfo(requestMapping, condition) : null);
 	}
 

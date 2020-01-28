@@ -289,8 +289,19 @@ public abstract class AbstractHandlerMapping extends WebApplicationObjectSupport
 	 */
 	@Override
 	protected void initApplicationContext() throws BeansException {
+		// 说明：这是HandlerMapping Bean在创建阶段（Bean生命周期）被调用的初始化方法
+
+		// Tips：initApplicationContext方法覆写了父类WebApplicationObjectSupport的initApplicationContext方法，
+		// 而WebApplicationObjectSupport类的initApplicationContext方法又覆写了父类ApplicationObjectSupport的initApplicationContext方法，
+		// 而ApplicationObjectSupport类的initApplicationContext方法被initApplicationContext(ApplicationContext context)所调用，
+		// 而initApplicationContext(ApplicationContext context)又被setApplicationContext(...)所调用，
+		// 该setApplicationContext(...)为ApplicationObjectSupport类所实现的ApplicationContextAware接口方法。
+
+		// 模板方法：用于给子类提供一个添加（或修改）Interceptors的入口
 		extendInterceptors(this.interceptors);
+		// 查找Spring容器中所有MappedInterceptor类型的Bean并注册到adaptedInterceptors中
 		detectMappedInterceptors(this.adaptedInterceptors);
+		// 初始化Interceptor，主要是将合适的添加到adaptedInterceptors中
 		initInterceptors();
 	}
 
@@ -398,19 +409,25 @@ public abstract class AbstractHandlerMapping extends WebApplicationObjectSupport
 	@Override
 	@Nullable
 	public final HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
+		// 【步骤1】：获取Handler
+		// 模板方法，子类覆写实现
 		Object handler = getHandlerInternal(request);
 		if (handler == null) {
+			// 默认实现，返回默认的Handler
+			// 【步骤2】：若没有获取到Handler，则此处获取默认的Handler
 			handler = getDefaultHandler();
 		}
 		if (handler == null) {
 			return null;
 		}
 		// Bean name or resolved handler?
+		// 【步骤3】：如果Handler为String类型，则以此为BeanName去Spring容器中获取真正的Handler对象实例
 		if (handler instanceof String) {
 			String handlerName = (String) handler;
 			handler = obtainApplicationContext().getBean(handlerName);
 		}
 
+		// 【步骤4】：获取HandlerExecutionChain对象实例（其内部持有Handler对象实例、符合要求的HandlerInterceptor实例）
 		HandlerExecutionChain executionChain = getHandlerExecutionChain(handler, request);
 
 		if (logger.isTraceEnabled()) {
@@ -474,14 +491,20 @@ public abstract class AbstractHandlerMapping extends WebApplicationObjectSupport
 				(HandlerExecutionChain) handler : new HandlerExecutionChain(handler));
 
 		String lookupPath = this.urlPathHelper.getLookupPathForRequest(request);
+		// 说明：MappedInterceptor是HandlerInterceptor的子类，
+		// 此处添加的逻辑是：如果仅仅是HandlerInterceptor则添加进去，
+		// 否则，若为MappedInterceptor，那么必须进行匹配判断才添加。
+		// MappedInterceptor不同于HandlerInterceptor最大之处是：
 		for (HandlerInterceptor interceptor : this.adaptedInterceptors) {
 			if (interceptor instanceof MappedInterceptor) {
 				MappedInterceptor mappedInterceptor = (MappedInterceptor) interceptor;
+				// 符合要求的MappedInterceptor将被添加
 				if (mappedInterceptor.matches(lookupPath, this.pathMatcher)) {
 					chain.addInterceptor(mappedInterceptor.getInterceptor());
 				}
 			}
 			else {
+				// 添加adaptedInterceptors（非MappedInterceptor）
 				chain.addInterceptor(interceptor);
 			}
 		}
