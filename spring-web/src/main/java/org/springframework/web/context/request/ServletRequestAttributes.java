@@ -112,13 +112,18 @@ public class ServletRequestAttributes extends AbstractRequestAttributes {
 	 */
 	@Nullable
 	protected final HttpSession getSession(boolean allowCreate) {
+		// isRequestActive返回当前请求是否处于活动状态，
+		// 也就是说如果当前请求Request处于处理中，那么该方法返回true，
+		// 如果当前请求已经被处理完了，那么该方法返回false。
 		if (isRequestActive()) {
+			// 从当前请求中获取Session并返回
 			HttpSession session = this.request.getSession(allowCreate);
 			this.session = session;
 			return session;
 		}
 		else {
 			// Access through stored session reference, if any...
+			// 可理解为获取之前所持有的Session进行返回
 			HttpSession session = this.session;
 			if (session == null) {
 				if (allowCreate) {
@@ -143,6 +148,10 @@ public class ServletRequestAttributes extends AbstractRequestAttributes {
 
 	@Override
 	public Object getAttribute(String name, int scope) {
+		// 说明：该方法是ServletRequestAttributes所提供的一个统一的属性获取方法，
+		// 通过scope来区分是从Request中获取还是从Session中获取。
+
+		// 情形一：从请求Request中获取属性
 		if (scope == SCOPE_REQUEST) {
 			if (!isRequestActive()) {
 				throw new IllegalStateException(
@@ -150,6 +159,7 @@ public class ServletRequestAttributes extends AbstractRequestAttributes {
 			}
 			return this.request.getAttribute(name);
 		}
+		// 情形二：从会话Session中获取属性
 		else {
 			HttpSession session = getSession(false);
 			if (session != null) {
