@@ -39,6 +39,10 @@ import org.springframework.web.servlet.ModelAndView;
  */
 public class SimpleControllerHandlerAdapter implements HandlerAdapter {
 
+	/**
+	 * 用于适配Controller接口类型的Handler，主要的调用逻辑就是直接调用Controller接口的handleRequest方法。
+	 */
+
 	@Override
 	public boolean supports(Object handler) {
 		return (handler instanceof Controller);

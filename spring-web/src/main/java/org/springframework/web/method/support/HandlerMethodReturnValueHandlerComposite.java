@@ -45,6 +45,7 @@ public class HandlerMethodReturnValueHandlerComposite implements HandlerMethodRe
 	 * Return a read-only list with the registered handlers, or an empty list.
 	 */
 	public List<HandlerMethodReturnValueHandler> getHandlers() {
+		// 之所以是不可修改的，主要应该是考虑到不希望使用者便捷的修改列表中各个HandlerMethodReturnValueHandler实现类的顺序
 		return Collections.unmodifiableList(this.returnValueHandlers);
 	}
 

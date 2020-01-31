@@ -45,12 +45,21 @@ public class InvocableHandlerMethod extends HandlerMethod {
 
 	private static final Object[] EMPTY_ARGS = new Object[0];
 
+	/**
+	 * InvocableHandlerMethod继承自HandlerMethod，但其增加就了方法invokeForRequest，
+	 * 增加了执行处理的逻辑。
+	 */
 
+	// 可以创建WebDataBinder，用于参数解析器ArgumentResolver
 	@Nullable
 	private WebDataBinderFactory dataBinderFactory;
 
+	// 用于解析参数
+	// Tips：HandlerMethodArgumentResolverComposite其实是【组合模式】的安全实现，
+	// 该类中聚合了所有的参数解析器。
 	private HandlerMethodArgumentResolverComposite resolvers = new HandlerMethodArgumentResolverComposite();
 
+	// 用于获取参数名
 	private ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
 
 
@@ -131,10 +140,12 @@ public class InvocableHandlerMethod extends HandlerMethod {
 	public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
 			Object... providedArgs) throws Exception {
 
+		// 【步骤1】：准备方法所需的参数
 		Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
 		if (logger.isTraceEnabled()) {
 			logger.trace("Arguments: " + Arrays.toString(args));
 		}
+		// 【步骤2】：具体调用方法
 		return doInvoke(args);
 	}
 
@@ -146,24 +157,34 @@ public class InvocableHandlerMethod extends HandlerMethod {
 	 */
 	protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
 			Object... providedArgs) throws Exception {
+		// 说明：在RequestMappingHandlerAdapter中的调用并没有提供参数providedArgs，
+		// 所以下面的逻辑中是直接使用了【参数解析的情形二】的，也就是通过resolvers来进行参数的解析。
 
+		// 调用父类HandlerMethod的getMethodParameters获取方法的所有参数
 		MethodParameter[] parameters = getMethodParameters();
 		if (ObjectUtils.isEmpty(parameters)) {
 			return EMPTY_ARGS;
 		}
 
+		// args用于保存接下来解析出的参数值
 		Object[] args = new Object[parameters.length];
 		for (int i = 0; i < parameters.length; i++) {
 			MethodParameter parameter = parameters[i];
+			// 给parameter设置参数名解析器
 			parameter.initParameterNameDiscovery(this.parameterNameDiscoverer);
+			// 【参数解析的情形一】：如果providedArgs非空，则在providedArgs中根据类型匹配去找
 			args[i] = findProvidedArgument(parameter, providedArgs);
+			// 解析出了当前参数则跳过后面的逻辑继续进行下一个
 			if (args[i] != null) {
 				continue;
 			}
+			// 【参数解析的情形二】：使用resolvers进行解析
+			// 判断是否支持对该参数进行解析
 			if (!this.resolvers.supportsParameter(parameter)) {
 				throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
 			}
 			try {
+				// 利用resolvers真正进行参数解析
 				args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
 			}
 			catch (Exception ex) {
@@ -187,6 +208,7 @@ public class InvocableHandlerMethod extends HandlerMethod {
 	protected Object doInvoke(Object... args) throws Exception {
 		ReflectionUtils.makeAccessible(getBridgedMethod());
 		try {
+			// 反射调用真正的目标方法去执行
 			return getBridgedMethod().invoke(getBean(), args);
 		}
 		catch (IllegalArgumentException ex) {

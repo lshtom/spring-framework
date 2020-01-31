@@ -95,15 +95,20 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 	public final Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
 			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
 
+		// 【步骤1】：根据参数parameter获取相应的NamedValueInfo对象实例
+		// 比如对于@PathVariable注解而言，其中的逻辑就是解析该注解的信息来构建出NamedValueInfo
 		NamedValueInfo namedValueInfo = getNamedValueInfo(parameter);
+		// 【步骤2】：考虑到参数可能为Optional类型，那么此处就是获取真正的参数
 		MethodParameter nestedParameter = parameter.nestedIfOptional();
 
+		// 【步骤3】：解析诸如@PathVariable注解中使用的占位符或表达式，比如@PathVariable("#{myId}")
 		Object resolvedName = resolveStringValue(namedValueInfo.name);
 		if (resolvedName == null) {
 			throw new IllegalArgumentException(
 					"Specified name must not resolve to null: [" + namedValueInfo.name + "]");
 		}
 
+		// 【步骤4】：真正进行参数解析
 		Object arg = resolveName(resolvedName.toString(), nestedParameter, webRequest);
 		if (arg == null) {
 			if (namedValueInfo.defaultValue != null) {
@@ -118,6 +123,7 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 			arg = resolveStringValue(namedValueInfo.defaultValue);
 		}
 
+		// 【步骤5】：如果binderFactory非空，则用它创建出binder并转换前面解析出的参数（如果需要转换的话）
 		if (binderFactory != null) {
 			WebDataBinder binder = binderFactory.createBinder(webRequest, null, namedValueInfo.name);
 			try {
@@ -134,6 +140,7 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 			}
 		}
 
+		// 【步骤6】：对解析出的参数值进行后置处理
 		handleResolvedValue(arg, namedValueInfo.name, parameter, mavContainer, webRequest);
 
 		return arg;
@@ -143,8 +150,13 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 	 * Obtain the named value for the given method parameter.
 	 */
 	private NamedValueInfo getNamedValueInfo(MethodParameter parameter) {
+		// 先尝试从缓存中获取当前参数的NamedValueInfo，若没有才对当前参数进行实际的解析获取，并缓存
 		NamedValueInfo namedValueInfo = this.namedValueInfoCache.get(parameter);
 		if (namedValueInfo == null) {
+			// 根据参数parameter解析获取相应的NamedValueInfo，
+			// createNamedValueInfo为模板方法，由具体的子类所覆写，
+			// 如@PathVariable注解参数的解析器PathVariableMethodArgumentResolver继承自该类，
+			// 并覆写了该模板方法。
 			namedValueInfo = createNamedValueInfo(parameter);
 			namedValueInfo = updateNamedValueInfo(parameter, namedValueInfo);
 			this.namedValueInfoCache.put(parameter, namedValueInfo);

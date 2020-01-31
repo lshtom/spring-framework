@@ -48,12 +48,23 @@ import org.springframework.web.context.request.WebRequest;
  */
 public class SessionAttributesHandler {
 
+	// 用于存储@SessionAttributes注解里value的值，也就是参数名
 	private final Set<String> attributeNames = new HashSet<>();
 
+	// 用于存储@SessionAttributes注解里types的值，也就是参数类型
 	private final Set<Class<?>> attributeTypes = new HashSet<>();
 
+	// 用于存储已知的可以被当前处理器处理的属性名
+	// 说明：其与attributeNames的区别在于：attributeNames仅保存的是从注解@SessionAttributes的values属性中获取到的值，
+	// 而knownAttributeNames除了包括@SessionAttributes的values属性的值外，还包括：
+	// 当isHandlerSessionAttribute方法被调用时，如果判断为也是当前Handler的@SessionAttributes所指定的属性名或属性类型时,
+	// 也就被加入到knownAttributeNames中。
+	// 也就是说：本质上knownAttributeNames除了包括attributeNames上的所有值，还可能包括attributeTypes中所指定的属性的属性名！
 	private final Set<String> knownAttributeNames = Collections.newSetFromMap(new ConcurrentHashMap<>(4));
 
+	// SessionAttributeStore用于负责SessionAttribute的存储工作，但实际的值默认是存储在Session中的，
+	// 如果希望将值保存在别的地方，比如Redis中，那么可以重写这个SessionAttributeStore，
+	// 然后设置到RequestMappingHandlerAdapter中。
 	private final SessionAttributeStore sessionAttributeStore;
 
 
@@ -68,6 +79,7 @@ public class SessionAttributesHandler {
 		Assert.notNull(sessionAttributeStore, "SessionAttributeStore may not be null");
 		this.sessionAttributeStore = sessionAttributeStore;
 
+		// 根据当前Handler（比如HandlerMethod）所在Bean类的类型handlerType去尝试获取在该类上标注的@SessionAttributes注解信息
 		SessionAttributes ann = AnnotatedElementUtils.findMergedAnnotation(handlerType, SessionAttributes.class);
 		if (ann != null) {
 			Collections.addAll(this.attributeNames, ann.names());
@@ -127,8 +139,11 @@ public class SessionAttributesHandler {
 	 * @return a map with handler session attributes, possibly empty
 	 */
 	public Map<String, Object> retrieveAttributes(WebRequest request) {
+		// 说明：该方法其实是根据名称获取@SessionAttributes中所指定的属性的属性值
+
 		Map<String, Object> attributes = new HashMap<>();
 		for (String name : this.knownAttributeNames) {
+			// 根据名称来获取属性值的本质是通过SessionAttributeStore中的方法来进行的
 			Object value = this.sessionAttributeStore.retrieveAttribute(request, name);
 			if (value != null) {
 				attributes.put(name, value);

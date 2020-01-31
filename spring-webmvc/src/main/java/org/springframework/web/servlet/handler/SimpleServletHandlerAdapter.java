@@ -54,6 +54,10 @@ import org.springframework.web.servlet.ModelAndView;
  */
 public class SimpleServletHandlerAdapter implements HandlerAdapter {
 
+	/**
+	 * 用于适配Servlet类型的Handler，其直接调用了Servlet的service方法。
+	 */
+
 	@Override
 	public boolean supports(Object handler) {
 		return (handler instanceof Servlet);

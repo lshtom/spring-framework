@@ -40,6 +40,11 @@ import org.springframework.web.servlet.ModelAndView;
  */
 public class HttpRequestHandlerAdapter implements HandlerAdapter {
 
+	/**
+	 * 说明：该类型的Adapter，用于适配HttpRequestHandler类型的Handler，
+	 * 其直接实现了HandlerAdapter接口，并在所实现的handle方法中直接调用HttpRequestHandler的handleRequest方法。
+	 */
+
 	@Override
 	public boolean supports(Object handler) {
 		return (handler instanceof HttpRequestHandler);

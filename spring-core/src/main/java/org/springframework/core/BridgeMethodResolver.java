@@ -61,6 +61,10 @@ public final class BridgeMethodResolver {
 	 * if no more specific one could be found)
 	 */
 	public static Method findBridgedMethod(Method bridgeMethod) {
+		// 说明：该方法的本质还是利用了JDK的反射包进行“被桥方法”的获取，
+		// 也就是拿到真正应该被调用的方法。
+
+		// 利用JDK提供的方法判断当前方法是否为桥方法，若不是则为我们需要的真正的方法，直接返回
 		if (!bridgeMethod.isBridge()) {
 			return bridgeMethod;
 		}
@@ -75,11 +79,13 @@ public final class BridgeMethodResolver {
 		}
 
 		// Now perform simple quick check.
+		// 只找到唯一的一个被桥方法，那么就只能是它了，直接返回
 		if (candidateMethods.size() == 1) {
 			return candidateMethods.get(0);
 		}
 
 		// Search for candidate match.
+		// 找到多个被桥方法，要做进一步判断处理
 		Method bridgedMethod = searchCandidates(candidateMethods, bridgeMethod);
 		if (bridgedMethod != null) {
 			// Bridged method found...
@@ -99,6 +105,9 @@ public final class BridgeMethodResolver {
 	 * checks and can be used quickly filter for a set of possible matches.
 	 */
 	private static boolean isBridgedCandidateFor(Method candidateMethod, Method bridgeMethod) {
+		// 注意：这方法有两个入参：候选的被桥方法、桥方法
+		// 说明：该方法的作用是判断候选方法是否为与桥方法同名的“被桥方法”（注意不是桥方法），
+		// 也就是判断候选方法是否为我们真正相应的方法。
 		return (!candidateMethod.isBridge() && !candidateMethod.equals(bridgeMethod) &&
 				candidateMethod.getName().equals(bridgeMethod.getName()) &&
 				candidateMethod.getParameterCount() == bridgeMethod.getParameterCount());

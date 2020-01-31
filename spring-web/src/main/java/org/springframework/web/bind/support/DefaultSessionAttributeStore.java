@@ -61,6 +61,9 @@ public class DefaultSessionAttributeStore implements SessionAttributeStore {
 		Assert.notNull(request, "WebRequest must not be null");
 		Assert.notNull(attributeName, "Attribute name must not be null");
 		String storeAttributeName = getAttributeNameInSession(request, attributeName);
+		// 注意：此处的request为WebRequest接口类型，其实现类是ServletWebRequest，
+		// 该类继承自ServletRequestAttributes，这个类中对Request/Session中的属性读写操作做了统一的封装，
+		// 具体操作的是Request中保存的属性还是Session中保存的属性所依据的是scope。
 		return request.getAttribute(storeAttributeName, WebRequest.SCOPE_SESSION);
 	}
 

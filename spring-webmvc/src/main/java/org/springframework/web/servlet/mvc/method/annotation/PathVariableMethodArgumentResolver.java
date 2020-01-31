@@ -82,6 +82,7 @@ public class PathVariableMethodArgumentResolver extends AbstractNamedValueMethod
 
 	@Override
 	protected NamedValueInfo createNamedValueInfo(MethodParameter parameter) {
+		// 获取标注在当前参数上的@PathVariable注解的信息，并构建出NamedValueInfo
 		PathVariable ann = parameter.getParameterAnnotation(PathVariable.class);
 		Assert.state(ann != null, "No PathVariable annotation");
 		return new PathVariableNamedValueInfo(ann);
@@ -91,6 +92,10 @@ public class PathVariableMethodArgumentResolver extends AbstractNamedValueMethod
 	@SuppressWarnings("unchecked")
 	@Nullable
 	protected Object resolveName(String name, MethodParameter parameter, NativeWebRequest request) throws Exception {
+		// 这其实就是拿到了URL上的值，比如有URL：book/info/2333（对应book/info/{id}），
+		// 但是，SpringMVC中并非是此时才对request上的URL进行解析的，
+		// 而是在RequestMappingInfoHandlerMapping类中根据lookupPath获取到Handler后设置到request的属性中的，
+		// 属性的名称就是HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE！
 		Map<String, String> uriTemplateVars = (Map<String, String>) request.getAttribute(
 				HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST);
 		return (uriTemplateVars != null ? uriTemplateVars.get(name) : null);
@@ -105,6 +110,7 @@ public class PathVariableMethodArgumentResolver extends AbstractNamedValueMethod
 	@SuppressWarnings("unchecked")
 	protected void handleResolvedValue(@Nullable Object arg, String name, MethodParameter parameter,
 			@Nullable ModelAndViewContainer mavContainer, NativeWebRequest request) {
+		// 说明：主要的逻辑是：将解析出PathVariable设置到了request属性中，方便以后（如View中）使用。
 
 		String key = View.PATH_VARIABLES;
 		int scope = RequestAttributes.SCOPE_REQUEST;

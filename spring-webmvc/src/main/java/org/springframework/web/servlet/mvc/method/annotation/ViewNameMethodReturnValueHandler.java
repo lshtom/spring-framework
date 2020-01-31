@@ -70,14 +70,19 @@ public class ViewNameMethodReturnValueHandler implements HandlerMethodReturnValu
 
 	@Override
 	public boolean supportsReturnType(MethodParameter returnType) {
+		// 说明：用于判断当前返回值处理器是否支持对当前返回值的处理
+
 		Class<?> paramType = returnType.getParameterType();
+		// 说明：String也实现了CharSequence接口
 		return (void.class == paramType || CharSequence.class.isAssignableFrom(paramType));
 	}
 
 	@Override
 	public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
 			ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
-
+		// 说明：由于该返回值处理所针对处理的情形是返回值为viewName的情况，
+		// 所以主要的逻辑就是：将返回值转换为viewName（就是调用toString方法），
+		// 并进行相关参数的设置！
 		if (returnValue instanceof CharSequence) {
 			String viewName = returnValue.toString();
 			mavContainer.setViewName(viewName);

@@ -39,8 +39,13 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  */
 public class ModelMethodProcessor implements HandlerMethodArgumentResolver, HandlerMethodReturnValueHandler {
 
+	/**
+	 * 说明：用于解析Model类型参数，直接返回mavContainer中的model
+	 */
+
 	@Override
 	public boolean supportsParameter(MethodParameter parameter) {
+		// 只要参数类型为Model类型，则支持使用该解析器进行参数解析处理
 		return Model.class.isAssignableFrom(parameter.getParameterType());
 	}
 
@@ -48,7 +53,7 @@ public class ModelMethodProcessor implements HandlerMethodArgumentResolver, Hand
 	@Nullable
 	public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
 			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
-
+		// 对于Model类型的参数的解析，其实就是直接获取Model，将Model返回即可
 		Assert.state(mavContainer != null, "ModelAndViewContainer is required for model exposure");
 		return mavContainer.getModel();
 	}

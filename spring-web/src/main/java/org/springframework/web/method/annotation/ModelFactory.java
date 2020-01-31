@@ -63,6 +63,7 @@ public final class ModelFactory {
 
 	private static final Log logger = LogFactory.getLog(ModelFactory.class);
 
+	// modelMethods中持有当前HandlerMethod所在Bean类下所有被@ModelAttribute注解所标注的方法
 	private final List<ModelMethod> modelMethods = new ArrayList<>();
 
 	private final WebDataBinderFactory dataBinderFactory;
@@ -106,19 +107,40 @@ public final class ModelFactory {
 	public void initModel(NativeWebRequest request, ModelAndViewContainer container, HandlerMethod handlerMethod)
 			throws Exception {
 
+		// 【步骤1】：获取@SessionAttributes注解所定义的属性的属性值，并合并到mavContainer中。
+		// 说明：实例变量sessionAttributesHandler中所持有的SessionAttributesHandler对象实例是来自于ModelFactory的构造方法传入，
+		// 而其又是来自于getSessionAttributesHandler(handlerMethod)方法的返回，
+		// 也就是说当前拿到的这个SessionAttributesHandler对象实例其实是与handlerMethod高度绑定的，
+		// 而retrieveAttributes方法中要传入参数request，那是因为属性值是存在Session中，需要通过Request去获取。
 		Map<String, ?> sessionAttributes = this.sessionAttributesHandler.retrieveAttributes(request);
 		container.mergeAttributes(sessionAttributes);
+
+		// 【步骤2】：执行标注了@ModelAttribute注解的方法，并将获取到的返回值给设置到Model中，而属性值所对应的属性名来自于@ModelAttribute注解的指定
 		invokeModelAttributeMethods(request, container);
 
+		// 说明：@ModelAttribute注解用于指定从Model中获取哪些属性的属性值（当该注解用于方法的入参前就属于这种情形），
+		// 亦或者用于向Model中指定的属性写入相应的属性值（当该注解用于方法上时就属于这种情形），
+		// 而属性值的获取就通过调用当前HandlerMethod所在的Bean类下被@ModelAttribute注解所标注的方法来拿到；
+		// @SessionAttributes注解用于指定Model中的哪些属性要被缓存到Session中；
+		// @SessionAttributes注解与@ModelAttribute注解之间并没有必然的联系，当然两者可以配合使用。
+
+		// 【步骤3】：判断当前handlerMethod的入参是否既被@ModelAttribute注解中的属性所声明了，
+		// 且又被在@SessionAttributes注解中的属性所声明，且还不在mavContainer中，
+		// 那么将从SessionAttributes中获取并设置到mavContainer中。
 		for (String name : findSessionAttributeArguments(handlerMethod)) {
 			if (!container.containsAttribute(name)) {
+				// 从sessionAttributesHandler中获取@SessionAttributes中所指定的属性的属性值
 				Object value = this.sessionAttributesHandler.retrieveAttribute(request, name);
 				if (value == null) {
 					throw new HttpSessionRequiredException("Expected session attribute '" + name + "'", name);
 				}
+				// 然后将该属性值设置到相应的Model中
 				container.addAttribute(name, value);
 			}
 		}
+		// 说明：上面这个在方法的参数上既标注了@SessionAttributes注解又标注了@ModelAttribute注解意味着：
+		// 从Session中获取指定属性的属性值，然后设置到Model中，
+		// 上面的这步骤3的就是进行这种情形的处理的。
 	}
 
 	/**
@@ -128,24 +150,33 @@ public final class ModelFactory {
 	private void invokeModelAttributeMethods(NativeWebRequest request, ModelAndViewContainer container)
 			throws Exception {
 
+		// 依次遍历当前HandlerMethod所在Bean类下所有被@ModelAttribute注解标注的方法进行调用处理
 		while (!this.modelMethods.isEmpty()) {
+			// 【步骤1】：获取标注了@ModelAttribute注解的方法
 			InvocableHandlerMethod modelMethod = getNextModelMethod(container).getHandlerMethod();
+			// 获取该方法上的注解信息
 			ModelAttribute ann = modelMethod.getMethodAnnotation(ModelAttribute.class);
 			Assert.state(ann != null, "No ModelAttribute annotation");
+			// 如果属性名已经在mavContainer上则表明该方法已经被调用过了，直接跳过。
 			if (container.containsAttribute(ann.name())) {
 				if (!ann.binding()) {
+					// 设置禁用数据绑定
 					container.setBindingDisabled(ann.name());
 				}
 				continue;
 			}
 
+			// 【步骤2】：反射调用这个被@ModelAttribute注解所标注的方法并获取返回值
 			Object returnValue = modelMethod.invokeForRequest(request, container);
+			// 【步骤3】：处理返回值，设置到Model中
 			if (!modelMethod.isVoid()){
+				// 获取要设置到Model中的属性名
 				String returnValueName = getNameForReturnValue(returnValue, modelMethod.getReturnType());
 				if (!ann.binding()) {
 					container.setBindingDisabled(returnValueName);
 				}
 				if (!container.containsAttribute(returnValueName)) {
+					// mavContainer中持有Model，此处的addAttribute方法其实是将属性值添加到Model中
 					container.addAttribute(returnValueName, returnValue);
 				}
 			}
@@ -169,6 +200,7 @@ public final class ModelFactory {
 	 */
 	private List<String> findSessionAttributeArguments(HandlerMethod handlerMethod) {
 		List<String> result = new ArrayList<>();
+		// 遍历当前HandlerMethod的每一个参数，并依次判断该参数上是否标注了@ModelAttribute注解
 		for (MethodParameter parameter : handlerMethod.getMethodParameters()) {
 			if (parameter.hasParameterAnnotation(ModelAttribute.class)) {
 				String name = getNameForParameter(parameter);
@@ -190,12 +222,15 @@ public final class ModelFactory {
 	 */
 	public void updateModel(NativeWebRequest request, ModelAndViewContainer container) throws Exception {
 		ModelMap defaultModel = container.getDefaultModel();
+		// 【步骤1】：管理维护SessionAttributes中的数据
 		if (container.getSessionStatus().isComplete()){
 			this.sessionAttributesHandler.cleanupAttributes(request);
 		}
 		else {
+			// 这个的本质逻辑其实是利用Model的数据去更新SessionAttributes的数据
 			this.sessionAttributesHandler.storeAttributes(request, defaultModel);
 		}
+		// 【步骤2】：给Model中需要的参数设置BindingResult，以备视图使用
 		if (!container.isRequestHandled() && container.getModel() == defaultModel) {
 			updateBindingResult(request, defaultModel);
 		}
@@ -208,6 +243,9 @@ public final class ModelFactory {
 		List<String> keyNames = new ArrayList<>(model.keySet());
 		for (String name : keyNames) {
 			Object value = model.get(name);
+			// isBindingCandidate方法是判断是否需要为当前所遍历到的Model的属性添加BindingResult，
+			// 当然BindingResult也是添加到Model中，只不过属性名上会加上一个固定前缀，
+			// 这样子，如果后面某个属性想获取相应的BindingResult，则只需要利用（BindingResult.MODEL_KEY_PREFIX+属性名）就可以从Model中获取了。
 			if (value != null && isBindingCandidate(name, value)) {
 				String bindingResultKey = BindingResult.MODEL_KEY_PREFIX + name;
 				if (!model.containsAttribute(bindingResultKey)) {
@@ -222,6 +260,10 @@ public final class ModelFactory {
 	 * Whether the given attribute requires a {@link BindingResult} in the model.
 	 */
 	private boolean isBindingCandidate(String attributeName, Object value) {
+		// 说明其规则：
+		// 规则1：当前属性值不是BindingResult、空值、数组、Collection、Map和简单类型的话都会返回true；
+		// 规则2：当前属性只要在SessionAttributes中设置了，则就一定会返回true；
+		// 规则3：不满足上述规则1和规则2，则返回false。
 		if (attributeName.startsWith(BindingResult.MODEL_KEY_PREFIX)) {
 			return false;
 		}
@@ -262,10 +304,13 @@ public final class ModelFactory {
 	 * @return the derived name (never {@code null} or empty String)
 	 */
 	public static String getNameForReturnValue(@Nullable Object returnValue, MethodParameter returnType) {
+		// 首先是先尝试获取该被@ModelAttribute所标注的方法上的这个注解中的value属性的值，
+		// 如果这个值非空，则将其作为后面存入到Model中的属性的属性名返回。
 		ModelAttribute ann = returnType.getMethodAnnotation(ModelAttribute.class);
 		if (ann != null && StringUtils.hasText(ann.value())) {
 			return ann.value();
 		}
+		// 否则，根据返回值的类型来生成属性名返回
 		else {
 			Method method = returnType.getMethod();
 			Assert.state(method != null, "No handler method");

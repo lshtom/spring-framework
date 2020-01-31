@@ -375,12 +375,15 @@ public abstract class WebContentGenerator extends WebApplicationObjectSupport {
 	 */
 	protected final void checkRequest(HttpServletRequest request) throws ServletException {
 		// Check whether we should support the request method.
+		// 【步骤1】：获取Request请求方法，并判断是否支持该请求方法
+		// 说明：默认情况下supportedMethods为空，也就是说不进行请求方法检查，支持所有类型的请求方法
 		String method = request.getMethod();
 		if (this.supportedMethods != null && !this.supportedMethods.contains(method)) {
 			throw new HttpRequestMethodNotSupportedException(method, this.supportedMethods);
 		}
 
 		// Check whether a session is required.
+		// 【步骤2】：判断Session是否必须，若是必须的则校验Session是否非空
 		if (this.requireSession && request.getSession(false) == null) {
 			throw new HttpSessionRequiredException("Pre-existing session required but none found");
 		}
@@ -397,6 +400,8 @@ public abstract class WebContentGenerator extends WebApplicationObjectSupport {
 			applyCacheControl(response, this.cacheControl);
 		}
 		else {
+			// cacheSeconds属性的默认值是-1，那么applyCacheSeconds方法中对于参数cacheSeconds的值为-1的处理方式是不做处理，
+			// 也就是既不设置缓存过期时间也不阻止使用缓存，与原来保持一致。
 			applyCacheSeconds(response, this.cacheSeconds);
 		}
 		if (this.varyByRequestHeaders != null) {
@@ -443,9 +448,11 @@ public abstract class WebContentGenerator extends WebApplicationObjectSupport {
 		if (this.useExpiresHeader || !this.useCacheControlHeader) {
 			// Deprecated HTTP 1.0 cache behavior, as in previous Spring versions
 			if (cacheSeconds > 0) {
+				// 给Response设置缓存过期时间
 				cacheForSeconds(response, cacheSeconds);
 			}
 			else if (cacheSeconds == 0) {
+				// 缓存时间等于0，意味着阻止使用缓存
 				preventCaching(response);
 			}
 		}

@@ -43,6 +43,10 @@ public abstract class AbstractHandlerMethodAdapter extends WebContentGenerator i
 		super(false);
 	}
 
+	/**
+	 * 该AbstractHandlerMethodAdapter类实现了Ordered接口，
+	 * 意味着对该类型组件可以设置顺序。
+	 */
 
 	/**
 	 * Specify the order value for this HandlerAdapter bean.
@@ -66,6 +70,7 @@ public abstract class AbstractHandlerMethodAdapter extends WebContentGenerator i
 	 */
 	@Override
 	public final boolean supports(Object handler) {
+		// handler必须是HandlerMethod类型
 		return (handler instanceof HandlerMethod && supportsInternal((HandlerMethod) handler));
 	}
 

@@ -61,9 +61,16 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  */
 public class HandlerMethod {
 
+	/**
+	 * 说明：HandlerMethod其实只是对Method级别的Handler进行了相应信息的封装而已，
+	 * 主要包括Method、参数、返回值、所在Bean类等信息，
+	 * 但该方法本身并没有进行调用执行的逻辑。
+	 */
+
 	/** Logger that is available to subclasses. */
 	protected final Log logger = LogFactory.getLog(getClass());
 
+	// 当前处理请求的Method所在的Bean类，此处的bean属性中可能持有的是该Bean的名称（String类型），而未必是Bean实例本身
 	private final Object bean;
 
 	@Nullable
@@ -73,10 +80,15 @@ public class HandlerMethod {
 
 	private final Method method;
 
+	// 被桥方法，如果不涉及泛型，那么bridgedMethod与上面的method是完全一样的，都指向同一个方法，
+	// 但如果涉及泛型，两者可能不同。
 	private final Method bridgedMethod;
 
+	// 方法的参数（都用了MethodParameter封装，而方法的返回值是用ReturnValueMethodParameter封装），
+	// 对于方法的返回值而言，并没有使用一个实例遍历去持有，因为没有必要，调用完就返回给外部调用者了。
 	private final MethodParameter[] parameters;
 
+	// 持有当前方法上所标注的@ResponseStatus注解的信息
 	@Nullable
 	private HttpStatus responseStatus;
 
@@ -316,12 +328,15 @@ public class HandlerMethod {
 	 * the bean name is resolved before a {@link HandlerMethod} is created and returned.
 	 */
 	public HandlerMethod createWithResolvedBean() {
+		// 若当前实例变量bean中的值为String类型，也就是其持有的是Handler Bean类的名称，
+		// 那么在通过BeanFactory拿到Bean对象实例后重新在原来的基础上构建一个HandlerMethod对象实例。
 		Object handler = this.bean;
 		if (this.bean instanceof String) {
 			Assert.state(this.beanFactory != null, "Cannot resolve bean name without BeanFactory");
 			String beanName = (String) this.bean;
 			handler = this.beanFactory.getBean(beanName);
 		}
+		// 复制原来的属性值（实例变量）重新构建一个新的HandlerMethod对象实例
 		return new HandlerMethod(this, handler);
 	}
 
@@ -520,6 +535,7 @@ public class HandlerMethod {
 	/**
 	 * A MethodParameter for a HandlerMethod return type based on an actual return value.
 	 */
+	// 用于封装返回值
 	private class ReturnValueMethodParameter extends HandlerMethodParameter {
 
 		@Nullable

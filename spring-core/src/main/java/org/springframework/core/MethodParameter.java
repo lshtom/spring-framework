@@ -61,37 +61,49 @@ public class MethodParameter {
 
 	private static final Annotation[] EMPTY_ANNOTATION_ARRAY = new Annotation[0];
 
+	// 参数所在的方法或参数的构造方法，Executable其实是Method以及Constructor的基类
 	private final Executable executable;
 
+	// 参数的序号
 	private final int parameterIndex;
 
+	// 参数
 	@Nullable
 	private volatile Parameter parameter;
 
+	// 嵌套级别，用于复合参数，比如List<String> params参数，params的嵌套级别是1，List内部的String的嵌套级别是2
 	private int nestingLevel = 1;
 
 	/** Map from Integer level to Integer type index. */
+	// 保存每层嵌套参数的序数
 	@Nullable
 	Map<Integer, Integer> typeIndexesPerLevel;
 
+	// 容器类型，也就是参数所属方法所在类
 	@Nullable
 	private volatile Class<?> containingClass;
 
+	// 参数类型
 	@Nullable
 	private volatile Class<?> parameterType;
 
+	// Type型的参数类型，也参数类型，但它的类型是Type
 	@Nullable
 	private volatile Type genericParameterType;
 
+	// 参数上的注解
 	@Nullable
 	private volatile Annotation[] parameterAnnotations;
 
+	// 参数名称查找器
 	@Nullable
 	private volatile ParameterNameDiscoverer parameterNameDiscoverer;
 
+	// 参数名称
 	@Nullable
 	private volatile String parameterName;
 
+	// 嵌套参数
 	@Nullable
 	private volatile MethodParameter nestedMethodParameter;
 
@@ -371,6 +383,7 @@ public class MethodParameter {
 	 * @see #nested()
 	 */
 	public MethodParameter nestedIfOptional() {
+		// 如果参数的类型为Optional类型，则获取嵌套在其中的真正的参数，否则直接返回当前的参数
 		return (getParameterType() == Optional.class ? nested() : this);
 	}
 

@@ -68,6 +68,8 @@ public class ServletRequestAttributes extends AbstractRequestAttributes {
 	@Nullable
 	private volatile HttpSession session;
 
+	// 用于保存从Session中获取过的值，最后request使用完后再同步给Session，
+	// 之所以这么做的考虑是：Session中的值可能已经被别的方式所修改过。
 	private final Map<String, Object> sessionAttributesToUpdate = new ConcurrentHashMap<>(1);
 
 
@@ -280,6 +282,9 @@ public class ServletRequestAttributes extends AbstractRequestAttributes {
 	 */
 	@Override
 	protected void updateAccessedSessionAttributes() {
+		// 该方法的逻辑是：将之前在调用getAttribute方法从Session中获取到的值（也被暂存了一份在sessionAttributesToUpdate中）给设置回Session中，
+		// 此updateAccessedSessionAttributes是在request处理完后被调用的（webRequest.requestCompleted()中调用）。
+
 		if (!this.sessionAttributesToUpdate.isEmpty()) {
 			// Update all affected session attributes.
 			HttpSession session = getSession(false);
