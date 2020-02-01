@@ -61,8 +61,10 @@ public class InternalResourceViewResolver extends UrlBasedViewResolver {
 	 * is present.
 	 */
 	public InternalResourceViewResolver() {
+		// 在构造方法中调用了setViewClass方法进行viewClass的设置
 		Class<?> viewClass = requiredViewClass();
 		if (InternalResourceView.class == viewClass && jstlPresent) {
+			// JstlView是InternalResourceView的子类
 			viewClass = JstlView.class;
 		}
 		setViewClass(viewClass);

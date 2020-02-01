@@ -74,8 +74,14 @@ public class ViewResolverComposite implements ViewResolver, Ordered, Initializin
 		return this.order;
 	}
 
+	/**
+	 * 说明：考虑到各个ViewResolver实现类未必是Bean，而是直接注册到ViewResolverComposite中的，
+	 * 所以此处要到那些所注册进来的实现了ApplicationContextAware或ServletContextAware或InitializingBean接口的ViewResolver进行初始化。
+	 */
+
 	@Override
 	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+		// 对所有实现了ApplicationContextAware接口的ViewResolver进行初始化
 		for (ViewResolver viewResolver : this.viewResolvers) {
 			if (viewResolver instanceof ApplicationContextAware) {
 				((ApplicationContextAware)viewResolver).setApplicationContext(applicationContext);
@@ -85,6 +91,7 @@ public class ViewResolverComposite implements ViewResolver, Ordered, Initializin
 
 	@Override
 	public void setServletContext(ServletContext servletContext) {
+		// 对所有实现了ServletContextAware接口的ViewResolver进行初始化
 		for (ViewResolver viewResolver : this.viewResolvers) {
 			if (viewResolver instanceof ServletContextAware) {
 				((ServletContextAware)viewResolver).setServletContext(servletContext);
@@ -94,6 +101,7 @@ public class ViewResolverComposite implements ViewResolver, Ordered, Initializin
 
 	@Override
 	public void afterPropertiesSet() throws Exception {
+		// 对所有实现了InitializingBean接口的ViewResolver进行初始化
 		for (ViewResolver viewResolver : this.viewResolvers) {
 			if (viewResolver instanceof InitializingBean) {
 				((InitializingBean) viewResolver).afterPropertiesSet();
@@ -104,6 +112,7 @@ public class ViewResolverComposite implements ViewResolver, Ordered, Initializin
 	@Override
 	@Nullable
 	public View resolveViewName(String viewName, Locale locale) throws Exception {
+		// 遍历所持有的所有的ViewResolver，如果解析成功（非空）则立即返回。
 		for (ViewResolver viewResolver : this.viewResolvers) {
 			View view = viewResolver.resolveViewName(viewName, locale);
 			if (view != null) {

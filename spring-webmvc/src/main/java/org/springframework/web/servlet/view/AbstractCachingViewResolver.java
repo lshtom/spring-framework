@@ -68,6 +68,14 @@ public abstract class AbstractCachingViewResolver extends WebApplicationObjectSu
 	/** Fast access cache for Views, returning already cached instances without a global lock. */
 	private final Map<Object, View> viewAccessCache = new ConcurrentHashMap<>(DEFAULT_CACHE_LIMIT);
 
+	// 说明：虽然viewCreationCache与viewAccessCache都缓存了视图，
+	// 但是viewAccessCache主要用于控制缓存的删除！
+	// 由于viewAccessCache为ConcurrentHashMap，并发查询性能好，
+	// 但不具备根据xxx判断条件进行元素自动删除的功能，
+	// 而viewCreationCache为LinkedHashMap，并不是线程安全的，
+	// 为了保证线程安全只能在进行读写操作时加上synchronized这种重锁，
+	// 所以性能不如ConcurrentHashMap，
+	// 所以SpringMVC中采用了将两者结合起来的策略！
 	/** Map from view key to View instance, synchronized for View creation. */
 	@SuppressWarnings("serial")
 	private final Map<Object, View> viewCreationCache =
@@ -75,6 +83,8 @@ public abstract class AbstractCachingViewResolver extends WebApplicationObjectSu
 				@Override
 				protected boolean removeEldestEntry(Map.Entry<Object, View> eldest) {
 					if (size() > getCacheLimit()) {
+						// 可以看到超过了限制也会去删除viewAccessCache中的元素，
+						// 所以实现了利用viewCreationCache去控制viewAccessCache
 						viewAccessCache.remove(eldest.getKey());
 						return true;
 					}
@@ -146,14 +156,17 @@ public abstract class AbstractCachingViewResolver extends WebApplicationObjectSu
 	@Nullable
 	public View resolveViewName(String viewName, Locale locale) throws Exception {
 		if (!isCache()) {
+			// 如果没有缓存则直接进行视图创建
 			return createView(viewName, locale);
 		}
 		else {
+			// 否则，尝试从缓存中获取视图
 			Object cacheKey = getCacheKey(viewName, locale);
 			View view = this.viewAccessCache.get(cacheKey);
 			if (view == null) {
 				synchronized (this.viewCreationCache) {
 					view = this.viewCreationCache.get(cacheKey);
+					// 如果从缓存中获取到的视图为空，则再尝试进行视图的创建
 					if (view == null) {
 						// Ask the subclass to create the View object.
 						view = createView(viewName, locale);
@@ -247,6 +260,7 @@ public abstract class AbstractCachingViewResolver extends WebApplicationObjectSu
 	 */
 	@Nullable
 	protected View createView(String viewName, Locale locale) throws Exception {
+		// 模板方法，由子类覆写实现，进行视图的获取
 		return loadView(viewName, locale);
 	}
 

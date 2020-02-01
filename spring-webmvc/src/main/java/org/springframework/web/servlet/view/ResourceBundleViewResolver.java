@@ -198,8 +198,12 @@ public class ResourceBundleViewResolver extends AbstractCachingViewResolver
 
 	@Override
 	protected View loadView(String viewName, Locale locale) throws Exception {
+		// 获取指定的BeanFactory容器，这个容器中包含了特定的View视图资源
+		// 特别注意：此处的BeanFactory其实是在initFactory中创建或获取（如果有缓存的话）的，
+		// 里面主要是加载了各种View Bean，但与外面那个真正的Spring容器并非是同一个！！！
 		BeanFactory factory = initFactory(locale);
 		try {
+			// 从容器中根据viewName来获取类型为View的Bean作为所获取的视图返回
 			return factory.getBean(viewName, View.class);
 		}
 		catch (NoSuchBeanDefinitionException ex) {
