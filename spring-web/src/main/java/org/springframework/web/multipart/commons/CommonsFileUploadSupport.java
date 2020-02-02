@@ -252,7 +252,13 @@ public abstract class CommonsFileUploadSupport {
 		Map<String, String> multipartParameterContentTypes = new HashMap<>();
 
 		// Extract multipart files and multipart parameters.
+		// 将FileItems分成文件和参数两类，并设置到对用的Map上，
+		// 主要是3个Map：
+		// 1）multipartFiles：保存文件
+		// 2）multipartParameters：保存参数
+		// 3）multipartParameterContentTypes：保存Content-Type
 		for (FileItem fileItem : fileItems) {
+			// 1)如果是参数类型
 			if (fileItem.isFormField()) {
 				String value;
 				String partEncoding = determineEncoding(fileItem.getContentType(), encoding);
@@ -276,8 +282,10 @@ public abstract class CommonsFileUploadSupport {
 					String[] newParam = StringUtils.addStringToArray(curParam, value);
 					multipartParameters.put(fileItem.getFieldName(), newParam);
 				}
+				// 保存Content-Type
 				multipartParameterContentTypes.put(fileItem.getFieldName(), fileItem.getContentType());
 			}
+			// 2)如果是文件类型
 			else {
 				// multipart file field
 				CommonsMultipartFile file = createMultipartFile(fileItem);

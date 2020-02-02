@@ -121,13 +121,20 @@ public class CommonsMultipartResolver extends CommonsFileUploadSupport
 
 	@Override
 	public boolean isMultipart(HttpServletRequest request) {
+		// 利用apache的commons-fileupload的方法来判断当前请求是否为文件上传请求，
+		// 其主要的判断规则有两条：
+		// 1）请求是否为POST请求；2）请求的Content-Type是否以“multipart/”开头。
 		return ServletFileUpload.isMultipartContent(request);
 	}
 
 	@Override
 	public MultipartHttpServletRequest resolveMultipart(final HttpServletRequest request) throws MultipartException {
 		Assert.notNull(request, "Request must not be null");
+		// 根据是否要延迟对Multipart的解析标志位resolveLazily来进行针对性的处理
 		if (this.resolveLazily) {
+			// 情形一：延迟处理Multipart，那么将重写DefaultMultipartHttpServletRequest的initializeMultipart方法，
+			// 进行Multipart解析处理的逻辑将放在所重写的initializeMultipart方法中，
+			// 该initializeMultipart方法将在调用getXXX方法（getMultipartFiles等）时才调用。
 			return new DefaultMultipartHttpServletRequest(request) {
 				@Override
 				protected void initializeMultipart() {
@@ -139,6 +146,8 @@ public class CommonsMultipartResolver extends CommonsFileUploadSupport
 			};
 		}
 		else {
+			// 情形二：非延迟处理Multipart，那么将先对request进行解析，并在解析好的结果的基础上构建DefaultMultipartHttpServletRequest，
+			// 之后调用getXXX方法将无需再进行Multipart的处理解析了。
 			MultipartParsingResult parsingResult = parseRequest(request);
 			return new DefaultMultipartHttpServletRequest(request, parsingResult.getMultipartFiles(),
 					parsingResult.getMultipartParameters(), parsingResult.getMultipartParameterContentTypes());

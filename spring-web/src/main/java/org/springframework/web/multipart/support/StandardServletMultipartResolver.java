@@ -79,11 +79,14 @@ public class StandardServletMultipartResolver implements MultipartResolver {
 
 	@Override
 	public boolean isMultipart(HttpServletRequest request) {
+		// 说明：判断当前的请求是否为文件上传请求，
+		// 主要的判断逻辑是获取请求的Content-Type，然后检查Content-Type是否以“multipart/”开头。
 		return StringUtils.startsWithIgnoreCase(request.getContentType(), "multipart/");
 	}
 
 	@Override
 	public MultipartHttpServletRequest resolveMultipart(HttpServletRequest request) throws MultipartException {
+		// 第二个入参为：是否要延迟对Multipart的解析，默认是false
 		return new StandardMultipartHttpServletRequest(request, this.resolveLazily);
 	}
 

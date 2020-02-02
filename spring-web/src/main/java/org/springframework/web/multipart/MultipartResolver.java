@@ -91,6 +91,7 @@ public interface MultipartResolver {
 	 * @param request the servlet request to be evaluated
 	 * @return whether the request contains multipart content
 	 */
+	// 主要是判断当前的请求是否为文件上传请求
 	boolean isMultipart(HttpServletRequest request);
 
 	/**

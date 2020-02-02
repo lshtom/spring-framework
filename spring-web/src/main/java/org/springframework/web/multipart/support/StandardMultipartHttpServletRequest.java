@@ -90,6 +90,8 @@ public class StandardMultipartHttpServletRequest extends AbstractMultipartHttpSe
 
 
 	private void parseRequest(HttpServletRequest request) {
+		// 说明：主要是通过request的getParts方法获取所有的Part，
+		// 然后使用它们创建出File并保存到multipartFiles中，以便处理器之后可以使用。
 		try {
 			Collection<Part> parts = request.getParts();
 			this.multipartParameterNames = new LinkedHashSet<>(parts.size());
