@@ -89,17 +89,23 @@ public abstract class AbstractFlashMapManager implements FlashMapManager {
 	@Override
 	@Nullable
 	public final FlashMap retrieveAndUpdate(HttpServletRequest request, HttpServletResponse response) {
+		// 【步骤1】：从当前请求（准确的说是Session）中获取FlashMap列表
 		List<FlashMap> allFlashMaps = retrieveFlashMaps(request);
 		if (CollectionUtils.isEmpty(allFlashMaps)) {
 			return null;
 		}
 
+		// 【步骤2】：从FlashMap列表找出过期的，记录在mapsToRemove中
 		List<FlashMap> mapsToRemove = getExpiredFlashMaps(allFlashMaps);
+		// 【步骤3】：将与当前请求相匹配的FlashMap也找出来，同样添加到mapsToRemove中，后面将要从Session中移除掉
+		// Tips：之所以要将与当前request相匹配的FlashMap给删除掉，
+		// 因为FlashMap用于redirect参数传递，而现在既然已经完成了redirect时参数传递的任务（就是此时），所以就应该删除掉。
 		FlashMap match = getMatchingFlashMap(allFlashMaps, request);
 		if (match != null) {
 			mapsToRemove.add(match);
 		}
 
+		// 【步骤4】：FlashMap列表的更新
 		if (!mapsToRemove.isEmpty()) {
 			Object mutex = getFlashMapsMutex(request);
 			if (mutex != null) {
@@ -117,6 +123,7 @@ public abstract class AbstractFlashMapManager implements FlashMapManager {
 			}
 		}
 
+		// 【步骤5】：返回前面找出的与当前request相匹配的FlashMap
 		return match;
 	}
 
@@ -160,6 +167,7 @@ public abstract class AbstractFlashMapManager implements FlashMapManager {
 	 * Uses the expected request path and query parameters saved in the FlashMap.
 	 */
 	protected boolean isFlashMapForRequest(FlashMap flashMap, HttpServletRequest request) {
+		// 检查目标路径，如果FlashMap中保存的路径和Request不匹配则返回false
 		String expectedPath = flashMap.getTargetRequestPath();
 		if (expectedPath != null) {
 			String requestUri = getUrlPathHelper().getOriginatingRequestUri(request);
@@ -167,6 +175,7 @@ public abstract class AbstractFlashMapManager implements FlashMapManager {
 				return false;
 			}
 		}
+		// 检查参数，如果FlashMap中保存的url参数在Request中没有则返回false
 		MultiValueMap<String, String> actualParams = getOriginatingRequestParams(request);
 		MultiValueMap<String, String> expectedParams = flashMap.getTargetRequestParams();
 		for (String expectedName : expectedParams.keySet()) {
@@ -194,14 +203,20 @@ public abstract class AbstractFlashMapManager implements FlashMapManager {
 			return;
 		}
 
+		// 首先对flashMap中的转发地址和参数进行编码，这里的request主要用来获取当前的编码方式
 		String path = decodeAndNormalizePath(flashMap.getTargetRequestPath(), request);
 		flashMap.setTargetRequestPath(path);
 
+		// 设置有效期
 		flashMap.startExpirationPeriod(getFlashMapTimeout());
 
+		// 获取同步锁，getFlashMapsMutex方法可由子类覆写，
+		// 让子类来决定是否需要进行同步操作。
 		Object mutex = getFlashMapsMutex(request);
 		if (mutex != null) {
 			synchronized (mutex) {
+				// 从请求中（本质是Session）尝试获取FlashMap列表，如果没有则新建一个空列表，
+				// 然后将此处传入的flashMap添加到该列表中，并将列表更新回Session中。
 				List<FlashMap> allFlashMaps = retrieveFlashMaps(request);
 				allFlashMaps = (allFlashMaps != null ? allFlashMaps : new CopyOnWriteArrayList<>());
 				allFlashMaps.add(flashMap);
