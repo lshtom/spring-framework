@@ -185,14 +185,19 @@ public class SimpleMappingExceptionResolver extends AbstractHandlerExceptionReso
 			HttpServletRequest request, HttpServletResponse response, @Nullable Object handler, Exception ex) {
 
 		// Expose ModelAndView for chosen error view.
+		// 根据异常找到显示错误页面的逻辑视图
 		String viewName = determineViewName(ex, request);
 		if (viewName != null) {
 			// Apply HTTP status code for error views, if specified.
 			// Only apply it if we're processing a top-level request.
+			// 尝试获取viewName所对应的statusCode
 			Integer statusCode = determineStatusCode(request, viewName);
 			if (statusCode != null) {
+				// 主要是将statusCode设置到response的status中，
+				// 同时也设置request的属性。
 				applyStatusCodeIfPossible(request, response, statusCode);
 			}
+			// 构建ModelAndView对象实例返回
 			return getModelAndView(viewName, ex, request);
 		}
 		else {
@@ -212,6 +217,8 @@ public class SimpleMappingExceptionResolver extends AbstractHandlerExceptionReso
 	@Nullable
 	protected String determineViewName(Exception ex, HttpServletRequest request) {
 		String viewName = null;
+		// 判断当前异常是否在排除异常列表excludedExceptions中，如果在则返回null，
+		// 相当于该异常解析器不对当前异常做处理。
 		if (this.excludedExceptions != null) {
 			for (Class<?> excludedEx : this.excludedExceptions) {
 				if (excludedEx.equals(ex.getClass())) {
@@ -220,6 +227,7 @@ public class SimpleMappingExceptionResolver extends AbstractHandlerExceptionReso
 			}
 		}
 		// Check for specific exception mappings.
+		// exceptionMappings中保存的是异常类全限定名与viewName的映射关系
 		if (this.exceptionMappings != null) {
 			viewName = findMatchingViewName(this.exceptionMappings, ex);
 		}
@@ -245,9 +253,14 @@ public class SimpleMappingExceptionResolver extends AbstractHandlerExceptionReso
 		String viewName = null;
 		String dominantMapping = null;
 		int deepest = Integer.MAX_VALUE;
+		// 依次遍历所匹配的exceptionMappings中的每一个异常全限定名，并计算与当前所处理的异常的距离
 		for (Enumeration<?> names = exceptionMappings.propertyNames(); names.hasMoreElements();) {
 			String exceptionMapping = (String) names.nextElement();
+			// 计算距离，只要距离大于等于0就是符合要求的
 			int depth = getDepth(exceptionMapping, ex);
+			// 同时如果存在多个则筛选出最优的，
+			// 筛选条件：1）匹配的深度（深度越浅越好）
+			//         2）匹配的配置项文本长度（越长越好）
 			if (depth >= 0 && (depth < deepest || (depth == deepest &&
 					dominantMapping != null && exceptionMapping.length() > dominantMapping.length()))) {
 				deepest = depth;
@@ -346,6 +359,7 @@ public class SimpleMappingExceptionResolver extends AbstractHandlerExceptionReso
 	 */
 	protected ModelAndView getModelAndView(String viewName, Exception ex) {
 		ModelAndView mv = new ModelAndView(viewName);
+		// exceptionAttribute为String类型，默认值为“exception”
 		if (this.exceptionAttribute != null) {
 			mv.addObject(this.exceptionAttribute, ex);
 		}

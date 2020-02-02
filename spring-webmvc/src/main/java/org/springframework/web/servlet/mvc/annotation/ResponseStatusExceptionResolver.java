@@ -69,9 +69,11 @@ public class ResponseStatusExceptionResolver extends AbstractHandlerExceptionRes
 	@Nullable
 	protected ModelAndView doResolveException(
 			HttpServletRequest request, HttpServletResponse response, @Nullable Object handler, Exception ex) {
+		// 说明：该解析器主要用于处理：异常类型为ResponseStatusException或者异常上标注了@ResponseStatus注解的
 
 		try {
 			if (ex instanceof ResponseStatusException) {
+				// 主要的逻辑其实就是对response中进行sendError的设置
 				return resolveResponseStatusException((ResponseStatusException) ex, request, response, handler);
 			}
 
@@ -80,6 +82,7 @@ public class ResponseStatusExceptionResolver extends AbstractHandlerExceptionRes
 				return resolveResponseStatus(status, request, response, handler, ex);
 			}
 
+			// 前面的条件未符合，那么将递归调用处理触发了当前异常的上一级异常
 			if (ex.getCause() instanceof Exception) {
 				return doResolveException(request, response, handler, (Exception) ex.getCause());
 			}

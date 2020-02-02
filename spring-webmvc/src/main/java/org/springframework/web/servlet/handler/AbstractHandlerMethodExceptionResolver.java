@@ -40,11 +40,17 @@ public abstract class AbstractHandlerMethodExceptionResolver extends AbstractHan
 	 */
 	@Override
 	protected boolean shouldApplyTo(HttpServletRequest request, @Nullable Object handler) {
+		// 说明：重写了父类AbstractHandlerExceptionResolver的shouldApplyTo方法，
+		// 主要是针对方法级别的Handler进行处理，
+		// 因为如果入参handler为HandlerMethod类型，那么父类所能处理的Handler其实应该是该method所在的Bean类实例,
+		// 所以该方法的逻辑关键就是针对入参handler为HandlerMethod进行处理。
+
 		if (handler == null) {
 			return super.shouldApplyTo(request, null);
 		}
 		else if (handler instanceof HandlerMethod) {
 			HandlerMethod handlerMethod = (HandlerMethod) handler;
+			// 获取method所在的Bean类，这才是SpringMVC中所说的Handler的一般性指代。
 			handler = handlerMethod.getBean();
 			return super.shouldApplyTo(request, handler);
 		}

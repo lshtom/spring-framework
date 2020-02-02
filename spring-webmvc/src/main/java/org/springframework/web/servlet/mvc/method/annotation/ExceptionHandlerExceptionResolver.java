@@ -383,11 +383,14 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 	protected ModelAndView doResolveHandlerMethodException(HttpServletRequest request,
 			HttpServletResponse response, @Nullable HandlerMethod handlerMethod, Exception exception) {
 
+		// 在处理器类中（HandlerMethod所在Bean类）找出标注了@ExceptionHandler注解的方法，封装成ServletInvocableHandlerMethod对象返回。
 		ServletInvocableHandlerMethod exceptionHandlerMethod = getExceptionHandlerMethod(handlerMethod, exception);
 		if (exceptionHandlerMethod == null) {
 			return null;
 		}
 
+		// 由于异常处理最终是靠调用异常处理方法来进行的，那就必然要涉及到方法入参的解析和返回值的解析，
+		// 所以要为ServletInvocableHandlerMethod设置ArgumentResolver和ReturnValueHandler。
 		if (this.argumentResolvers != null) {
 			exceptionHandlerMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
 		}
@@ -398,6 +401,7 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 		ServletWebRequest webRequest = new ServletWebRequest(request, response);
 		ModelAndViewContainer mavContainer = new ModelAndViewContainer();
 
+		// 执行异常处理方法调用
 		try {
 			if (logger.isDebugEnabled()) {
 				logger.debug("Using @ExceptionHandler " + exceptionHandlerMethod);
@@ -422,6 +426,7 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 			return null;
 		}
 
+		// 异常处理结果封装成ModelAndView返回
 		if (mavContainer.isRequestHandled()) {
 			return new ModelAndView();
 		}
@@ -463,11 +468,15 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 			handlerType = handlerMethod.getBeanType();
 			ExceptionHandlerMethodResolver resolver = this.exceptionHandlerCache.get(handlerType);
 			if (resolver == null) {
+				// 在ExceptionHandlerMethodResolver构造方法会找出并注册当前HandlerMethod所在Bean类下被@ExceptionHandler注解所标注的方法（其中也包括注解上配置的相关信息）
 				resolver = new ExceptionHandlerMethodResolver(handlerType);
 				this.exceptionHandlerCache.put(handlerType, resolver);
 			}
+			// 由于HandlerMethod所在的Bean类下可能有多个标注了@ExceptionHandler注解的方法，用于处理不同的注解，
+			// 所以此处就要根据当前发生的异常来找出唯一的那个处理该异常的方法。
 			Method method = resolver.resolveMethod(exception);
 			if (method != null) {
+				// 封装成ServletInvocableHandlerMethod，后续会调用相应的处理异常的方法进行异常的处理
 				return new ServletInvocableHandlerMethod(handlerMethod.getBean(), method);
 			}
 			// For advice applicability check below (involving base packages, assignable types
@@ -477,6 +486,7 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 			}
 		}
 
+		// exceptionHandlerAdviceCache中存的是全局的？所以这整体逻辑就是如果局部（当前HandlerMethod所在Bean类）异常方法能处理就不走全局的了。
 		for (Map.Entry<ControllerAdviceBean, ExceptionHandlerMethodResolver> entry : this.exceptionHandlerAdviceCache.entrySet()) {
 			ControllerAdviceBean advice = entry.getKey();
 			if (advice.isApplicableToBeanType(handlerType)) {

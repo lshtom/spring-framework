@@ -60,6 +60,7 @@ public class ExceptionHandlerMethodResolver {
 	 * @param handlerType the type to introspect
 	 */
 	public ExceptionHandlerMethodResolver(Class<?> handlerType) {
+		// 获取当前HandlerMethod所在Bean类下被@ExceptionHandler注解所标注的方法，并缓存到实例变量mappedMethods中（其中也包括注解上配置的相关信息）
 		for (Method method : MethodIntrospector.selectMethods(handlerType, EXCEPTION_HANDLER_METHODS)) {
 			for (Class<? extends Throwable> exceptionType : detectExceptionMappings(method)) {
 				addExceptionMapping(exceptionType, method);

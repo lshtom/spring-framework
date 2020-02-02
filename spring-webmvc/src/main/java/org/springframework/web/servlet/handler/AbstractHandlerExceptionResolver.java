@@ -135,8 +135,12 @@ public abstract class AbstractHandlerExceptionResolver implements HandlerExcepti
 	public ModelAndView resolveException(
 			HttpServletRequest request, HttpServletResponse response, @Nullable Object handler, Exception ex) {
 
+		// shouldApplyTo方法用于判断当前resolver能否处理所传入的handler所抛出的异常，
+		// 也就是说异常的处理是按照Handler来区分的，而不是按照异常的类型。
 		if (shouldApplyTo(request, handler)) {
+			// 进行response相关设置（主要是进行是否禁用缓存的设置）
 			prepareResponse(ex, response);
+			// 进行异常的实际解析，doResolveException为模板方法
 			ModelAndView result = doResolveException(request, response, handler, ex);
 			if (result != null) {
 				// Print debug message when warn logger is not enabled.
@@ -144,10 +148,12 @@ public abstract class AbstractHandlerExceptionResolver implements HandlerExcepti
 					logger.debug("Resolved [" + ex + "]" + (result.isEmpty() ? "" : " to " + result));
 				}
 				// Explicitly configured warn logger in logException method.
+				// 进行日志打印
 				logException(ex, request);
 			}
 			return result;
 		}
+		// 如果不能处理当前handler所抛出的异常，则返回null，让下一个resolver来解析处理
 		else {
 			return null;
 		}
@@ -180,6 +186,8 @@ public abstract class AbstractHandlerExceptionResolver implements HandlerExcepti
 			}
 		}
 		// Else only apply if there are no explicit handler mappings.
+		// 如果都没有设置mappedHandlers和mappedHandlerClasses，那么两者均为null，那么将返回true，
+		// 也就意味着默认可以对所有的Handler所抛出的异常进行处理。
 		return (this.mappedHandlers == null && this.mappedHandlerClasses == null);
 	}
 
@@ -219,7 +227,9 @@ public abstract class AbstractHandlerExceptionResolver implements HandlerExcepti
 	 * @see #preventCaching
 	 */
 	protected void prepareResponse(Exception ex, HttpServletResponse response) {
+		// preventResponseCaching默认值为false，就是不禁用缓存
 		if (this.preventResponseCaching) {
+			// 禁用缓存的逻辑就是给response的Header进行相关设置
 			preventCaching(response);
 		}
 	}
